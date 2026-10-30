@@ -14,6 +14,7 @@ Internal tools for 3R Plumbing & Mechanical. One static page (`index.html`, `app
 
 - Sign-in is Supabase Auth, email and password. Only emails on `app_users` (People tab) can read or write anything; everyone else sees nothing.
 - To add someone: add them on the People tab, then in Supabase go to Authentication → Users → Add user with the same email and a password you give them.
+- Invite and password-reset emails open the page with a Set your password screen. They only work when Supabase → Authentication → URL Configuration has Site URL `https://ross680.github.io/3r-tools/` (and the same address under Redirect URLs). The sign-in page has a Forgot password button that sends that email.
 - Admins import purchases, fix categories and manage People. Staff search, build return lists and see vendor spend.
 - The publishable key in `config.js` is meant to be public. Anonymous requests are refused on every table.
 - A return can't exceed what was bought minus what's already credited or on a list. The database enforces it (`private.guard_return_qty`).

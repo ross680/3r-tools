@@ -15,6 +15,8 @@ try{const th=localStorage.getItem("r3_theme");if(th)document.documentElement.dat
 $("#themeBtn").onclick=()=>{const d=document.documentElement;const dark=d.dataset.theme?d.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;d.dataset.theme=dark?"light":"dark";try{localStorage.setItem("r3_theme",d.dataset.theme);}catch(e){}};
 
 const CFG=window.R3_CONFIG;
+/* An invite or reset email lands here with type= (or an error) in the hash. Read it before the client clears it. */
+const LINK=new URLSearchParams(location.hash.slice(1));
 const sb=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true}});
 
 /* ---------- data ---------- */
@@ -684,11 +686,28 @@ function showLogin(msg){
   $("#app").innerHTML=`<form class="login panel" id="login"><h1>Sign in</h1><p class="lead">Use the email and password you were given for 3R Tools.</p>
   <label class="fl">Email<input type="email" id="em" autocomplete="username" required></label>
   <label class="fl">Password<input type="password" id="pw" autocomplete="current-password" required></label>
-  ${msg?`<p class="msg" style="text-align:left">${esc(msg)}</p>`:""}<button class="btn" type="submit">Sign in</button></form>`;
+  ${msg?`<p class="msg" style="text-align:left">${esc(msg)}</p>`:""}<button class="btn" type="submit">Sign in</button>
+  <button class="btn ghost" type="button" id="forgot">Forgot password? Email me a link</button></form>`;
   $("#login").onsubmit=async e=>{e.preventDefault();const btn=e.target.querySelector("button");btn.disabled=true;btn.textContent="Signing in…";
     const{data,error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
     if(error){showLogin(/invalid/i.test(error.message)?"That email and password don’t match.":error.message);return;}
     start(data.session);};
+  $("#forgot").onclick=async()=>{const em=$("#em").value.trim();if(!em){$("#em").focus();$("#em").reportValidity();return;}
+    const{error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname});
+    showLogin(error?error.message:`If ${em} has a login, an email with a link to set a new password is on its way.`);$("#em").value=em;};
+}
+function showSetPassword(session,msg){
+  $("#tabs").innerHTML="";$("#who").textContent=session.user.email||"";$("#signOut").hidden=false;
+  $("#app").innerHTML=`<form class="login panel" id="setpw"><h1>Set your password</h1><p class="lead">Choose the password you’ll use to sign in to 3R Tools as ${esc(session.user.email||"")}.</p>
+  <label class="fl">New password<input type="password" id="pw1" autocomplete="new-password" minlength="8" required></label>
+  <label class="fl">Type it again<input type="password" id="pw2" autocomplete="new-password" minlength="8" required></label>
+  ${msg?`<p class="msg" style="text-align:left">${esc(msg)}</p>`:""}<button class="btn" type="submit">Save password</button></form>`;
+  $("#setpw").onsubmit=async e=>{e.preventDefault();
+    if($("#pw1").value!==$("#pw2").value){showSetPassword(session,"The two passwords don’t match.");return;}
+    const btn=e.target.querySelector("button");btn.disabled=true;btn.textContent="Saving…";
+    const{error}=await sb.auth.updateUser({password:$("#pw1").value});
+    if(error){showSetPassword(session,error.message);return;}
+    start(session);};
 }
 let started=false;
 async function start(session){
@@ -710,5 +729,10 @@ async function start(session){
   setInterval(()=>{if(document.visibilityState==="visible")refreshReturns();},30000);
 }
 $("#signOut").onclick=async()=>{await sb.auth.signOut();location.reload();};
-sb.auth.getSession().then(({data})=>{if(data.session)start(data.session);else showLogin();});
+sb.auth.getSession().then(({data})=>{
+  const s=data.session,kind=LINK.get("type");
+  if(s&&(kind==="invite"||kind==="recovery"))showSetPassword(s);
+  else if(s)start(s);
+  else showLogin(LINK.get("error_description")?"That email link has expired or was already used. Enter your email and press Forgot password to get a new one.":"");
+});
 })();
