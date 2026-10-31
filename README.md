@@ -9,6 +9,7 @@ Internal tools for 3R Plumbing & Mechanical. One static page (`index.html`, `app
 - **Return list / Closed returns**: one shared list per vendor, with RA number, status, slip check, CSV and print. Changes show up for everyone within a second.
 - **Vendor spend**: net spend by category, vendor and month, filtered by search, category, vendor, dates and document type. Tap a bar to drill in. CSV download. Admins can fix a line's category here.
 - **Add purchases** (admin): upload a CSV or Excel export from any supply house. Columns are matched automatically and can be changed. Categories come from the part number when 3R has bought it before, otherwise from the description. Documents already on file are skipped. Credit memo lines are matched to the most recent earlier purchase of the same part, so returns count by quantity. Any upload can be undone.
+- **Inventory** (`inventory/index.html`): the 3R Inventory page built in claude.ai on this database (`inv_*`, `po_*`, `st_queue`). It's published as handed off, with two changes: its embedded starting data (items with vendor costs) is emptied, because the data is already in Supabase and this repository is public, and the Zapier ping after a ServiceTitan push is removed. It shares the 3R Tools sign-in on this site.
 - **People** (admin): who can sign in, and whether they're Team, Manager or Leadership.
 
 ## Access
