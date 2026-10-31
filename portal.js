@@ -12,6 +12,15 @@ const MAIN={phone:"781-974-5239",email:"info@3rplumbingandmechanical.com",addr:"
 const QUICK=["on-call","who-owns-what-who-to-call","tool-request","time-off-request","job-tags"];
 const SITE_RE=/sites\.google\.com\/(?:a\/)?3rplumbingandmechanical\.com\/3rteamportal\/?([^?#"']*)/;
 const SECTION_CONTACTS=["3R Team","Tech Support","Vendors & Partners","Jobsite"];
+// Top tabs and the sections each one shows. Sections not listed here stay on the Team Portal home.
+const PTABS={
+  tools:{title:"Team Tools",lead:"Calculators, field checklists, sales tools and maintenance guides.",sections:["field","sales","maintenance"]},
+  academy:{title:"Academy",lead:"Courses, wiring guides, code toolkits, exam prep and the handbook.",sections:["academy"]},
+  process:{title:"Process",lead:"How 3R runs the work: field standards, the office, dispatch and turnover.",sections:["process","office"]},
+  portals:{title:"Portals",lead:"Role portals for marketing, sales, warehouse, managers and leadership.",sections:["portals","leadership"]},
+  presentations:{title:"Presentations",lead:"Plans and decks for the team and for management.",sections:["presentations"]}};
+const tabOfSection=k=>Object.keys(PTABS).find(t=>PTABS[t].sections.includes(k))||"portal";
+let TQ={};
 
 const e=s=>C.esc(s);
 const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
@@ -40,21 +49,50 @@ function pageLink(p,opts){
   const flags=(p.kind==="link"?`<span class="tag t-n">Opens outside</span>`:"")+(p.encrypted?`<span class="tag t-w">PIN</span>`:"")+(p.audience!=="team"?`<span class="tag t-b">${p.audience==="leadership"?"Leadership":"Managers"}</span>`:"")+(!p.active?`<span class="tag t-r">Hidden</span>`:"");
   return `<a class="pcard${opts.small?" sm":""}" href="${e(href)}"${ext}><b>${e(p.title)}</b>${p.blurb&&!opts.small?`<span>${e(p.blurb)}</span>`:""}${flags?`<span class="tags">${flags}</span>`:""}</a>`;
 }
-function liveAnn(){const t=today();return ANN.filter(a=>a.active&&(!a.ends_on||a.ends_on>=t));}
-function renderHome(){
-  const admin=C.isAdmin();
-  const quick=QUICK.map(s=>PBY[s]).filter(Boolean);
-  const ann=admin?ANN:liveAnn();
-  const secs=SECTIONS.map(sec=>{
-    const all=PAGES.filter(p=>p.section===sec.key&&(p.active||admin));
+function renderSections(keys,filter){
+  const admin=C.isAdmin(),q=norm(filter||""),words=q?q.split(" "):[];
+  return SECTIONS.filter(sec=>keys.includes(sec.key)).map(sec=>{
+    let all=PAGES.filter(p=>p.section===sec.key&&(p.active||admin));
+    if(words.length)all=all.filter(p=>words.every(w=>p._n.includes(w)));
     if(!all.length)return"";
     const feat=all.filter(p=>p.featured),rest=all.filter(p=>!p.featured);
-    const show=feat.length?feat:all,more=feat.length?rest:[];
+    const show=words.length||!feat.length?all:feat,more=words.length||!feat.length?[]:rest;
     return `<section class="psec" id="sec-${e(sec.key)}"><div class="psec-h"><h2>${e(sec.title)}</h2><span class="hint">${e(sec.blurb)}</span></div>
       <div class="pgrid">${show.map(p=>pageLink(p)).join("")}</div>
       ${more.length?`<button class="btn ghost sm pmore" data-more="${e(sec.key)}" type="button" aria-expanded="${OPEN[sec.key]?"true":"false"}">${OPEN[sec.key]?"Hide":"Show"} ${more.length} more in ${e(sec.title)}</button>
       ${OPEN[sec.key]?`<div class="pgrid small">${more.map(p=>pageLink(p,{small:true})).join("")}</div>`:""}`:""}</section>`;
   }).join("");
+}
+function jumpChips(keys){
+  const admin=C.isAdmin();
+  const list=SECTIONS.filter(s=>keys.includes(s.key)&&PAGES.some(p=>p.section===s.key&&(p.active||admin)));
+  return list.length>1?`<nav class="pjump" aria-label="Sections">${list.map(s=>`<a href="#" data-jump="${e(s.key)}">${e(s.title)}</a>`).join("")}</nav>`:"";
+}
+function tabCount(t){const admin=C.isAdmin();return PAGES.filter(p=>PTABS[t].sections.includes(p.section)&&(p.active||admin)).length;}
+function renderTab(t){
+  const T=PTABS[t];
+  return `<h1>${e(T.title)}</h1><p class="lead">${e(T.lead)}</p>
+  <div class="sbar"><div class="q"><input id="tq" type="search" placeholder="Filter ${e(T.title)}" value="${e(TQ[t]||"")}" autocomplete="off" aria-label="Filter ${e(T.title)}"></div></div>
+  ${TQ[t]?"":jumpChips(T.sections)}
+  <div id="tsecs">${renderSections(T.sections,TQ[t])||`<div class="empty">${TQ[t]?`Nothing in ${e(T.title)} matches “${e(TQ[t])}”.`:`Nothing here yet.`}</div>`}</div>`;
+}
+function bindSections(){
+  document.querySelectorAll("[data-more]").forEach(b=>b.onclick=()=>{OPEN[b.dataset.more]=!OPEN[b.dataset.more];C.render();});
+  document.querySelectorAll("[data-jump]").forEach(a=>a.onclick=ev=>{ev.preventDefault();const t=document.getElementById("sec-"+a.dataset.jump);if(t)t.scrollIntoView({behavior:"smooth",block:"start"});});
+}
+function bindTab(t){
+  const q=document.getElementById("tq");
+  q.oninput=()=>{TQ[t]=q.value;const box=document.getElementById("tsecs");box.innerHTML=renderSections(PTABS[t].sections,TQ[t])||`<div class="empty">Nothing in ${e(PTABS[t].title)} matches “${e(TQ[t])}”.</div>`;bindSections();};
+  bindSections();
+}
+function liveAnn(){const t=today();return ANN.filter(a=>a.active&&(!a.ends_on||a.ends_on>=t));}
+function renderHome(){
+  const admin=C.isAdmin();
+  const quick=QUICK.map(s=>PBY[s]).filter(Boolean);
+  const ann=admin?ANN:liveAnn();
+  const homeKeys=SECTIONS.map(x=>x.key).filter(k=>tabOfSection(k)==="portal");
+  const browse=Object.keys(PTABS).map(t=>[t,tabCount(t)]).filter(([,n])=>n).map(([t,n])=>`<a class="pcard browse" href="#${t}"><b>${e(PTABS[t].title)}</b><span>${e(PTABS[t].lead)}</span><span class="tags"><span class="tag t-n">${n} page${n===1?"":"s"}</span></span></a>`).join("");
+  const secs=renderSections(homeKeys);
   return `<div class="phead"><div><h1>Team Portal</h1><p class="lead">Guides, tools, courses and contacts for the 3R team.</p></div>
     <div class="pmain"><a href="tel:${tel(MAIN.phone)}"><span>Main line / dispatch</span><b>${MAIN.phone}</b></a><a href="mailto:${MAIN.email}"><span>Office email</span><b>${MAIN.email}</b></a><a href="https://maps.google.com/?q=${encodeURIComponent(MAIN.addr)}" target="_blank" rel="noopener"><span>Shop</span><b>${MAIN.addr}</b></a></div></div>
   <div class="sbar"><div class="q"><input id="pq" type="search" placeholder="Search guides, tools, courses and contacts: “Navien”, “expansion tank”, “Webb”" value="${e(PQ)}" autocomplete="off" aria-label="Search the portal"></div></div>
@@ -64,7 +102,7 @@ function renderHome(){
     <section class="pann"><div class="psec-h"><h2>Announcements</h2>${admin?`<button class="btn sm" id="annNew" type="button">New announcement</button>`:""}</div>
       ${EDIT&&EDIT.kind==="ann"&&!EDIT.id?annForm({}):""}
       ${ann.length?ann.map(a=>EDIT&&EDIT.kind==="ann"&&EDIT.id===a.id?annForm(a):annItem(a)).join(""):`<p class="hint">No announcements right now.</p>`}</section>
-    <nav class="pjump" aria-label="Sections">${SECTIONS.filter(s=>PAGES.some(p=>p.section===s.key&&(p.active||admin))).map(s=>`<a href="#portal" data-jump="${e(s.key)}">${e(s.title)}</a>`).join("")}</nav>
+    <section class="psec"><div class="psec-h"><h2>Browse</h2></div><div class="pgrid">${browse}</div></section>
     ${secs}
   </div>`;
 }
@@ -113,8 +151,7 @@ function paintResults(){const r=document.getElementById("presults");if(r)r.inner
 function bindHome(){
   const q=document.getElementById("pq");
   q.oninput=()=>{PQ=q.value;runFullText();paintResults();};
-  document.querySelectorAll("[data-more]").forEach(b=>b.onclick=()=>{OPEN[b.dataset.more]=!OPEN[b.dataset.more];C.render();});
-  document.querySelectorAll("[data-jump]").forEach(a=>a.onclick=ev=>{ev.preventDefault();const t=document.getElementById("sec-"+a.dataset.jump);if(t)t.scrollIntoView({behavior:"smooth",block:"start"});});
+  bindSections();
   const nb=document.getElementById("annNew");if(nb)nb.onclick=()=>{EDIT={kind:"ann"};C.render();};
   document.querySelectorAll("[data-annedit]").forEach(b=>b.onclick=()=>{EDIT={kind:"ann",id:b.dataset.annedit};C.render();});
   const f=document.getElementById("annForm");
@@ -221,9 +258,9 @@ addEventListener("message",ev=>{
 function renderViewer(slug){
   const p=PBY[slug];
   if(!p)return `<p class="crumb"><a href="#portal">Team Portal</a></p><div class="empty">That page isn’t here, or you don’t have access to it. <a class="src" href="#portal">Back to the Team Portal</a></div>`;
-  const sec=SECTIONS.find(s=>s.key===p.section);
+  const sec=SECTIONS.find(s=>s.key===p.section),tk=tabOfSection(p.section);
   const admin=C.isAdmin();
-  return `<div class="vbar"><p class="crumb"><a href="#portal">Team Portal</a> › <a href="#portal" data-jump2="${e(p.section)}">${e(sec?sec.title:"")}</a></p>
+  return `<div class="vbar"><p class="crumb"><a href="#${tk}">${e(tk==="portal"?"Team Portal":PTABS[tk].title)}</a> › <a href="#${tk}" data-jump2="${e(p.section)}">${e(sec?sec.title:"")}</a></p>
     <div class="vtitle"><h1>${e(p.title)}</h1>${p.encrypted?`<span class="tag t-w">Enter the admin PIN on the page to open it</span>`:""}${admin?`<button class="btn ghost sm" id="pset" type="button" aria-expanded="${EDIT&&EDIT.kind==="page"?"true":"false"}">Page settings</button>`:""}</div>
     ${NOTICE?`<div class="banner">That link goes to a page that isn’t in 3R Tools yet. <a class="src" href="${e(NOTICE)}" target="_blank" rel="noopener">Open it on the Google Site</a> <button class="linkbtn" id="nclose" type="button">Dismiss</button></div>`:""}
     ${admin&&EDIT&&EDIT.kind==="page"?`<form class="panel maps" id="psForm">
@@ -239,7 +276,7 @@ function renderViewer(slug){
 }
 async function bindViewer(slug){
   const p=PBY[slug];if(!p)return;
-  const j=document.querySelector("[data-jump2]");if(j)j.onclick=()=>{OPEN[p.section]=true;setTimeout(()=>{const t=document.getElementById("sec-"+p.section);if(t)t.scrollIntoView({block:"start"});},50);};
+  const j=document.querySelector("[data-jump2]");if(j)j.onclick=()=>{setTimeout(()=>{const t=document.getElementById("sec-"+p.section);if(t)t.scrollIntoView({block:"start"});},80);};
   const nc=document.getElementById("nclose");if(nc)nc.onclick=()=>{NOTICE="";C.render();};
   const ps=document.getElementById("pset");if(ps)ps.onclick=()=>{EDIT=EDIT&&EDIT.kind==="page"?null:{kind:"page"};C.render();};
   const f=document.getElementById("psForm");
@@ -276,9 +313,11 @@ function render(route){
   }
   VIEW=null;app.classList.remove("wide");
   if(route==="contacts"){app.innerHTML=renderContacts();bindContacts();return;}
+  if(route.startsWith("tab/")&&PTABS[route.slice(4)]){const t=route.slice(4);const qEl=document.getElementById("tq"),had=qEl&&document.activeElement===qEl;app.innerHTML=renderTab(t);bindTab(t);if(had){const n=document.getElementById("tq");n.focus();n.setSelectionRange(n.value.length,n.value.length);}return;}
   const qEl=document.getElementById("pq"),had=qEl&&document.activeElement===qEl;
   app.innerHTML=renderHome();bindHome();
   if(had){const n=document.getElementById("pq");n.focus();n.setSelectionRange(n.value.length,n.value.length);}
 }
-window.R3Portal={load,render,reload};
+function tabFor(slug){const p=PBY[slug];return p?tabOfSection(p.section):"portal";}
+window.R3Portal={load,render,reload,tabFor};
 })();

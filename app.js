@@ -121,10 +121,11 @@ async function setVendor(v,patch){
 }
 
 /* ---------- routing ---------- */
-const ALL_TABS=[["portal","Team Portal"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
+const PORTAL_TABS=["portal","tools","academy","process","portals","presentations"];
+const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
 let TABS=ALL_TABS;
 /* A route is a tab key, or a Team Portal route: "portal/contacts" or "p/<page>". */
-const tabOf=r=>r.startsWith("p/")?"portal":r.split("/")[0];
+const tabOf=r=>r.startsWith("p/")?((window.R3Portal&&window.R3Portal.tabFor(r.slice(2)))||"portal"):r.split("/")[0];
 let route=location.hash.slice(1),tab=tabOf(route);
 addEventListener("hashchange",()=>{const r=location.hash.slice(1),t=tabOf(r);if(TABS.some(x=>x[0]===t)){route=r;tab=t;render();scrollTo(0,0);}});
 let Q="",WANT=1,VFILTER="All";
@@ -611,10 +612,11 @@ function renderAbout(){
 
 /* ---------- render ---------- */
 function render(){
+  if(route.startsWith("p/"))tab=tabOf(route);
   if(!TABS.some(t=>t[0]===tab)){tab="portal";route="portal";}
   const openN=RET.filter(x=>x.status!=="closed").length;
   $("#tabs").innerHTML=TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}</a>`).join("");
-  if(tab==="portal"){window.R3Portal.render(route.startsWith("p/")?route:route.split("/").slice(1).join("/"));return;}
+  if(PORTAL_TABS.includes(tab)){window.R3Portal.render(route.startsWith("p/")?route:tab==="portal"?route.split("/").slice(1).join("/"):"tab/"+tab);return;}
   $("#app").classList.remove("wide");
   if(tab==="find"){
     const qEl=$("#q"),hadFocus=qEl&&document.activeElement===qEl,pos=qEl?qEl.selectionStart:0;
