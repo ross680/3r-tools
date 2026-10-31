@@ -76,3 +76,5 @@ main.wide{max-width:1400px}
 #pframe{display:block;width:100%;height:calc(100dvh - 210px);min-height:520px;border:0;background:#fff}
 @media (max-width:640px){.crow{grid-template-columns:1fr}.cnote{grid-column:auto}.pgrid{grid-template-columns:1fr}#pframe{height:calc(100dvh - 170px)}.pmain{width:100%}.pmain a{flex:1 1 100%}}
 .crow .linkbtn{justify-self:start;grid-column:1/-1}
+code.key{font:13px ui-monospace,Menlo,monospace;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px 7px;overflow-wrap:anywhere}
+pre.code{font:12px ui-monospace,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}

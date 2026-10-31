@@ -10,6 +10,7 @@ Internal tools for 3R Plumbing & Mechanical. One static page (`index.html`, `app
 - **Vendor spend**: net spend by category, vendor and month, filtered by search, category, vendor, dates and document type. Tap a bar to drill in. CSV download. Admins can fix a line's category here.
 - **Add purchases** (admin): upload a CSV or Excel export from any supply house. Columns are matched automatically and can be changed. Categories come from the part number when 3R has bought it before, otherwise from the description. Documents already on file are skipped. Credit memo lines are matched to the most recent earlier purchase of the same part, so returns count by quantity. Any upload can be undone.
 - **Inventory** (`inventory/index.html`): the 3R Inventory page built in claude.ai on this database (`inv_*`, `po_*`, `st_queue`). It's published as handed off, with two changes: its embedded starting data (items with vendor costs) is emptied, because the data is already in Supabase and this repository is public, and the Zapier ping after a ServiceTitan push is removed. It shares the 3R Tools sign-in on this site.
+- **New invoices by themselves** (admin, on Add purchases): Zapier reads each vendor invoice or credit memo PDF and posts its lines to `public.purchase_intake` with an intake key an admin makes there. Setup: `docs/zapier-invoice-intake.md`.
 - **People** (admin): who can sign in, and whether they're Team, Manager or Leadership.
 
 ## Access
@@ -31,7 +32,7 @@ Portal tables: `portal_sections`, `portal_pages`, `portal_page_html` (with a ful
 
 Other tables in this project (`inv_*`, `po_*`, `call_reviews`, `process_checks`, `tto_discovery`, `st_queue`, `vendor_messages`) come from migrations applied outside this repository and aren't recorded here yet.
 
-Tables: `app_users`, `vendors` (includes each vendor's open RA number and return status), `categories`, `imports`, `purchase_docs`, `purchase_lines`, `return_lines`. `public.match_credit_lines(import)` runs after each upload.
+Tables: `app_users`, `vendors` (includes each vendor's open RA number and return status), `categories`, `imports`, `purchase_docs`, `purchase_lines`, `return_lines`. `public.match_credit_lines(import)` runs after each upload. Credit memo lines go first to return-list lines for the same part (`return_lines.credited_qty`, `credit_memo`), then to the most recent earlier purchase (`purchase_lines.returned_qty`). Each match is recorded in `credit_matches`, so undoing an upload takes its credits back off.
 
 The starting data (332 documents, 3,786 lines, $976,225.43) is the Return Generator artifact's purchase history, built 10/26/26. The one open return line on that artifact was carried over. Purchase data is not in this repository.
 

@@ -18,7 +18,9 @@ const PTABS={
   academy:{title:"Academy",lead:"Courses, wiring guides, code toolkits, exam prep and the handbook.",sections:["academy"]},
   process:{title:"Process",lead:"How 3R runs the work: field standards, the office, dispatch and turnover.",sections:["process","office"]},
   portals:{title:"Portals",lead:"Role portals for marketing, sales, warehouse, managers and leadership.",sections:["portals","leadership"]},
-  presentations:{title:"Presentations",lead:"Plans and decks for the team and for management.",sections:["presentations"]}};
+  presentations:{title:"Presentations",lead:"Team training decks for everyone, and leadership decks for owners and leadership.",sections:["presentations","leadership-presentations"]}};
+// Pages moved into these sections default to this audience in Page settings.
+const SECTION_AUDIENCE={"leadership-presentations":"leadership","leadership":"leadership"};
 const tabOfSection=k=>Object.keys(PTABS).find(t=>PTABS[t].sections.includes(k))||"portal";
 let TQ={};
 
@@ -49,12 +51,12 @@ function pageLink(p,opts){
   const flags=(p.kind==="link"?`<span class="tag t-n">Opens outside</span>`:"")+(p.encrypted?`<span class="tag t-w">PIN</span>`:"")+(p.audience!=="team"?`<span class="tag t-b">${p.audience==="leadership"?"Leadership":"Managers"}</span>`:"")+(!p.active?`<span class="tag t-r">Hidden</span>`:"");
   return `<a class="pcard${opts.small?" sm":""}" href="${e(href)}"${ext}><b>${e(p.title)}</b>${p.blurb&&!opts.small?`<span>${e(p.blurb)}</span>`:""}${flags?`<span class="tags">${flags}</span>`:""}</a>`;
 }
-function renderSections(keys,filter){
+function renderSections(keys,filter,showEmpty){
   const admin=C.isAdmin(),q=norm(filter||""),words=q?q.split(" "):[];
   return SECTIONS.filter(sec=>keys.includes(sec.key)).map(sec=>{
     let all=PAGES.filter(p=>p.section===sec.key&&(p.active||admin));
     if(words.length)all=all.filter(p=>words.every(w=>p._n.includes(w)));
-    if(!all.length)return"";
+    if(!all.length)return showEmpty&&admin&&!words.length?`<section class="psec" id="sec-${e(sec.key)}"><div class="psec-h"><h2>${e(sec.title)}</h2><span class="hint">${e(sec.blurb)}</span></div><div class="empty">Nothing here yet. To move a page here, open it and change its section in Page settings. New decks get added with Claude.</div></section>`:"";
     const feat=all.filter(p=>p.featured),rest=all.filter(p=>!p.featured);
     const show=words.length||!feat.length?all:feat,more=words.length||!feat.length?[]:rest;
     return `<section class="psec" id="sec-${e(sec.key)}"><div class="psec-h"><h2>${e(sec.title)}</h2><span class="hint">${e(sec.blurb)}</span></div>
@@ -74,7 +76,7 @@ function renderTab(t){
   return `<h1>${e(T.title)}</h1><p class="lead">${e(T.lead)}</p>
   <div class="sbar"><div class="q"><input id="tq" type="search" placeholder="Filter ${e(T.title)}" value="${e(TQ[t]||"")}" autocomplete="off" aria-label="Filter ${e(T.title)}"></div></div>
   ${TQ[t]?"":jumpChips(T.sections)}
-  <div id="tsecs">${renderSections(T.sections,TQ[t])||`<div class="empty">${TQ[t]?`Nothing in ${e(T.title)} matches “${e(TQ[t])}”.`:`Nothing here yet.`}</div>`}</div>`;
+  <div id="tsecs">${renderSections(T.sections,TQ[t],true)||`<div class="empty">${TQ[t]?`Nothing in ${e(T.title)} matches “${e(TQ[t])}”.`:`Nothing here yet.`}</div>`}</div>`;
 }
 function bindSections(){
   document.querySelectorAll("[data-more]").forEach(b=>b.onclick=()=>{OPEN[b.dataset.more]=!OPEN[b.dataset.more];C.render();});
@@ -279,6 +281,7 @@ async function bindViewer(slug){
   const j=document.querySelector("[data-jump2]");if(j)j.onclick=()=>{setTimeout(()=>{const t=document.getElementById("sec-"+p.section);if(t)t.scrollIntoView({block:"start"});},80);};
   const nc=document.getElementById("nclose");if(nc)nc.onclick=()=>{NOTICE="";C.render();};
   const ps=document.getElementById("pset");if(ps)ps.onclick=()=>{EDIT=EDIT&&EDIT.kind==="page"?null:{kind:"page"};C.render();};
+  const pss=document.getElementById("psS");if(pss)pss.onchange=()=>{const a=SECTION_AUDIENCE[pss.value];if(a)document.getElementById("psA").value=a;};
   const f=document.getElementById("psForm");
   if(f)f.onsubmit=async ev=>{ev.preventDefault();const v=id=>document.getElementById(id);
     const row={title:v("psT").value.trim(),blurb:v("psB").value.trim(),section:v("psS").value,audience:v("psA").value,keywords:v("psK").value.trim(),featured:v("psF").checked,active:v("psV").checked};

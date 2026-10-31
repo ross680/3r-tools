@@ -87,7 +87,7 @@ const slug=v=>v.replace(/[^A-Za-z0-9]+/g,"-");
 
 async function loadReturns(){
   const rows=await fetchAll("return_lines","*","added_at");
-  RET=rows.map(r=>({id:r.id,rowId:r.line_id,vendor:r.vendor,part:r.part,desc:r.description,cat:r.category,qty:+r.qty,unit:+r.unit_price,invoice:r.invoice,date:r.invoice_date||"",docType:r.doc_type,job:r.job,status:r.status,slipQty:r.slip_qty==null?null:+r.slip_qty,ra:r.ra,addedByName:r.added_by_name,addedAt:r.added_at,closedAt:r.closed_at||""}));
+  RET=rows.map(r=>({id:r.id,rowId:r.line_id,vendor:r.vendor,part:r.part,desc:r.description,cat:r.category,qty:+r.qty,unit:+r.unit_price,invoice:r.invoice,date:r.invoice_date||"",docType:r.doc_type,job:r.job,status:r.status,slipQty:r.slip_qty==null?null:+r.slip_qty,ra:r.ra,addedByName:r.added_by_name,addedAt:r.added_at,closedAt:r.closed_at||"",credited:+r.credited_qty||0,creditMemo:r.credit_memo||""}));
 }
 async function refreshReturns(){try{await Promise.all([loadReturns(),loadLists()]);rerenderSoon();}catch(e){}}
 function fail(e){
@@ -263,7 +263,7 @@ function vendorBlock(v,items,closed){
   const ro=!!closed;
   const rows=cats.map(c=>`<tr><td colspan="${closed?9:10}" class="cat">${esc(c)}</td></tr>`+items.filter(x=>x.cat===c).sort((a,b)=>a.desc.localeCompare(b.desc)).map(x=>{
     const old=x.date&&ageDays(x.date)>90;
-    return `<tr><td data-l="Part #">${esc(x.part)}</td><td data-l="" class="ds">${esc(x.desc)}${old&&!closed?' <span class="tag t-w">over 90 days</span>':""}${x.docType==="order confirmation"?' <span class="tag t-w">order conf.</span>':""}${x.addedByName?`<div class="who">Added by ${esc(x.addedByName)}</div>`:""}</td>
+    return `<tr><td data-l="Part #">${esc(x.part)}</td><td data-l="" class="ds">${esc(x.desc)}${old&&!closed?' <span class="tag t-w">over 90 days</span>':""}${x.docType==="order confirmation"?' <span class="tag t-w">order conf.</span>':""}${x.addedByName?`<div class="who">Added by ${esc(x.addedByName)}</div>`:""}${x.credited?`<div><span class="tag t-g">Credit memo ${esc(x.creditMemo)}: ${num(x.credited)} of ${num(x.qty)} credited</span></div>`:""}</td>
     <td class="n" data-l="Return qty">${ro?num(x.qty):`<input class="qi" type="number" min="1" step="any" value="${num(x.qty)}" data-lq="${x.id}" aria-label="Return qty">`}</td>
     <td class="n" data-l="Unit">${money(x.unit)}</td><td class="n" data-l="Credit"><b>${money(x.qty*x.unit)}</b></td><td data-l="Invoice">${esc(x.invoice)}</td><td data-l="Invoice date">${fmtDate(x.date)}</td>
     <td class="n" data-l="Slip qty">${ro?(x.slipQty==null?"":num(x.slipQty)):`<input class="qi" type="number" min="0" step="any" value="${x.slipQty==null?"":num(x.slipQty)}" placeholder="–" data-sq="${x.id}" aria-label="Qty on vendor slip">`}</td>
@@ -508,9 +508,32 @@ function renderImport(){
     ${ok.length>300?`<p class="hint">Showing the first 300 of ${ok.length} lines. The rest keep their suggested category; you can change any of them later on Vendor spend.</p>`:""}</section>
     <p><button class="btn" id="impsave" ${IMP.busy?"disabled":""}>${IMP.busy?"Saving…":`Add ${ok.length} lines on ${docs} documents`}</button></p>`:`<div class="warnbox">No new lines to add. Check the column choices above${dups.length?", or this file is already on file":""}.</div>`}`;
   }
-  return `<h1>Add purchases</h1><p class="lead">Upload past purchases from any supply house. They show up on Find items for returns and on Vendor spend by category. A document that’s already on file is skipped, so uploading the same export twice is safe.</p>${body}${hist}`;
+  return `<h1>Add purchases</h1><p class="lead">Upload past purchases from any supply house. They show up on Find items for returns and on Vendor spend by category. A document that’s already on file is skipped, so uploading the same export twice is safe.</p>${body}${renderIntake()}${hist}`;
+}
+/* Zapier invoice intake: Zapier reads each vendor PDF and posts its lines to purchase_intake. */
+let INTAKE={status:undefined,key:""};
+async function loadIntake(){const{data}=await sb.rpc("purchase_intake_status");INTAKE.status=(data&&data[0])||null;}
+function renderIntake(){
+  const st=INTAKE.status,url=CFG.url+"/rest/v1/rpc/purchase_intake";
+  const sample=JSON.stringify({p_key:INTAKE.key||"<intake key>",p_payload:{source:"Zapier: {{file name}}",rows:"{{rows from the Claude step}}"}},null,1);
+  return `<section class="panel"><h2>New invoices by themselves</h2>
+  <p class="hint">Zapier reads each vendor invoice or credit memo PDF and sends its lines here. Credit memos are matched automatically, including to lines already on a return list. Order confirmations and rebate lines are skipped, and a document sent twice is replaced, not doubled. Setup steps: <a class="src" href="https://github.com/ross680/3r-tools/blob/main/docs/zapier-invoice-intake.md" target="_blank" rel="noopener">Zapier invoice intake</a>.</p>
+  <p>${st===undefined?"Checking…":st?`Intake key made ${fmtDate(st.created_at)}${st.created_by_email?` by ${esc(st.created_by_email)}`:""}. ${st.last_used_at?`Last invoice received ${fmtDate(st.last_used_at)}.`:"Nothing received yet."}`:"No intake key yet."}</p>
+  ${INTAKE.key?`<div class="banner"><b>Copy this key now.</b> It’s shown once. Paste it into the Zapier step, then leave this page.<br><code class="key">${esc(INTAKE.key)}</code> <button class="btn sm" id="keyCopy" type="button">Copy key</button></div>
+  <p class="hint">Webhooks by Zapier → Custom Request: POST to <code>${esc(url)}</code>, headers <code>apikey: ${esc(CFG.key)}</code> and <code>Content-Type: application/json</code>, data:</p><pre class="code">${esc(sample)}</pre>`:""}
+  <button class="btn ${st?"ghost":""}" id="keyNew" type="button">${st?"Make a new key (the old one stops working)":"Make an intake key"}</button></section>`;
+}
+function bindIntake(){
+  if(INTAKE.status===undefined)loadIntake().then(()=>{if(tab==="import")render();});
+  const n=$("#keyNew");if(n)n.onclick=async()=>{
+    if(INTAKE.status&&n.dataset.sure!=="1"){n.dataset.sure="1";n.textContent="Replace the key? Zapier stops until you paste the new one";return;}
+    const{data,error}=await sb.rpc("purchase_intake_new_key",{p_label:"Zapier"});
+    if(error){fail(error);return;}
+    INTAKE.key=data;await loadIntake();render();};
+  const c=$("#keyCopy");if(c)c.onclick=async()=>{try{await navigator.clipboard.writeText(INTAKE.key);toast("Key copied");}catch(e){toast("Select the key and copy it.");}};
 }
 function bindImport(){
+  bindIntake();
   const f=$("#impfile");if(f)f.onchange=()=>{if(f.files[0])readFile(f.files[0]).catch(e=>{console.error(e);toast("Couldn’t read that file.");});};
   const rs=$("#impreset");if(rs)rs.onclick=()=>{Object.assign(IMP,{file:null,rows:[],recs:[],map:{},note:""});render();};
   const sh=$("#impsheet");if(sh)sh.onchange=()=>pickSheet(sh.value);
