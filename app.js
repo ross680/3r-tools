@@ -122,12 +122,15 @@ async function setVendor(v,patch){
 
 /* ---------- routing ---------- */
 const PORTAL_TABS=["portal","tools","academy","process","portals","presentations"];
-const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
+const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["requests","Requests"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
 let TABS=ALL_TABS;
+/* The top bar. Warehouse holds Inventory and the Return Generator screens in a second row. */
+const WH_SUB=["find","list","history","spend","import","about"];
+const TOP_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["warehouse","Warehouse"],["requests","Requests"],["people","People",true]];
 /* A route is a tab key, or a Team Portal route: "portal/contacts" or "p/<page>". */
-const tabOf=r=>r.startsWith("p/")?((window.R3Portal&&window.R3Portal.tabFor(r.slice(2)))||"portal"):r.split("/")[0];
+const tabOf=r=>r.startsWith("p/")?((window.R3Portal&&window.R3Portal.tabFor(r.slice(2)))||"portal"):r==="warehouse"?"find":r.split("/")[0];
 let route=location.hash.slice(1),tab=tabOf(route);
-addEventListener("hashchange",()=>{const r=location.hash.slice(1),t=tabOf(r);if(TABS.some(x=>x[0]===t)){route=r;tab=t;render();scrollTo(0,0);}});
+addEventListener("hashchange",()=>{const r=location.hash.slice(1)==="warehouse"?"find":location.hash.slice(1),t=tabOf(r);if(TABS.some(x=>x[0]===t)){route=r;tab=t;render();scrollTo(0,0);}});
 let Q="",WANT=1,VFILTER="All";
 
 /* ---------- search ---------- */
@@ -634,11 +637,19 @@ function renderAbout(){
 }
 
 /* ---------- render ---------- */
+function drawTabs(){
+  const openN=RET.filter(x=>x.status!=="closed").length,waitN=window.R3Requests?window.R3Requests.waitingCount():0;
+  const inWH=WH_SUB.includes(tab),top=inWH?"warehouse":tab;
+  const ct=k=>k==="warehouse"&&openN?`<span class="ct">${openN}</span>`:k==="requests"&&waitN?`<span class="ct hot">${waitN}</span>`:"";
+  $("#tabs").innerHTML=TOP_TABS.filter(t=>!t[2]||isAdmin).map(([k,l])=>`<a href="#${k}" class="${k===top?"on":""}">${l}${ct(k)}</a>`).join("");
+  const sub=$("#subtabs");sub.hidden=!inWH;
+  if(inWH)sub.innerHTML=`<a href="inventory/">Inventory</a>`+TABS.filter(([k])=>WH_SUB.includes(k)).map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}</a>`).join("");
+}
 function render(){
   if(route.startsWith("p/"))tab=tabOf(route);
   if(!TABS.some(t=>t[0]===tab)){tab="portal";route="portal";}
-  const openN=RET.filter(x=>x.status!=="closed").length;
-  $("#tabs").innerHTML=TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}</a>`).join("");
+  drawTabs();
+  if(tab==="requests"){window.R3Requests.render(route.split("/").slice(1).join("/"));return;}
   if(PORTAL_TABS.includes(tab)){window.R3Portal.render(route.startsWith("p/")?route:tab==="portal"?route.split("/").slice(1).join("/"):"tab/"+tab);return;}
   $("#app").classList.remove("wide");
   if(tab==="find"){
@@ -752,8 +763,8 @@ async function start(session){
   profile=p;isAdmin=p.role==="admin";
   $("#who").textContent=p.name||p.email;
   TABS=ALL_TABS.filter(t=>!t[2]||isAdmin);
-  const portalCtx={sb,esc,toast,fail,fmtDate,render:()=>render(),profile:()=>profile,isAdmin:()=>isAdmin};
-  try{await Promise.all([window.R3Portal.load(portalCtx),loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
+  const portalCtx={sb,esc,toast,fail,fmtDate,render:()=>render(),drawTabs:()=>drawTabs(),profile:()=>profile,isAdmin:()=>isAdmin};
+  try{await Promise.all([window.R3Portal.load(portalCtx),window.R3Requests.load(portalCtx),loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
   catch(e){console.error(e);$("#app").innerHTML=`<div class="warnbox">3R Tools couldn’t load. Reload the page. If it keeps happening, sign out and back in.</div>`;return;}
   render();
   let t=null;const soon=()=>{clearTimeout(t);t=setTimeout(refreshReturns,300);};

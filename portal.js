@@ -46,9 +46,11 @@ async function reload(){try{await load(C);}catch(err){C.fail(err);}}
 /* ---------- home ---------- */
 function pageLink(p,opts){
   opts=opts||{};
-  const href=p.kind==="link"?p.url:"#p/"+p.slug;
-  const ext=p.kind==="link"?` target="_blank" rel="noopener"`:"";
-  const flags=(p.kind==="link"?`<span class="tag t-n">Opens outside</span>`:"")+(p.encrypted?`<span class="tag t-w">PIN</span>`:"")+(p.audience!=="team"?`<span class="tag t-b">${p.audience==="leadership"?"Leadership":"Managers"}</span>`:"")+(!p.active?`<span class="tag t-r">Hidden</span>`:"");
+  // A link to a 3R Tools screen (like a request form) opens here, not in a new tab.
+  const own=p.kind==="link"&&/^https:\/\/ross680\.github\.io\/3r-tools\/#/.test(p.url);
+  const href=p.kind!=="link"?"#p/"+p.slug:own?p.url.slice(p.url.indexOf("#")):p.url;
+  const ext=p.kind==="link"&&!own?` target="_blank" rel="noopener"`:"";
+  const flags=(p.kind==="link"&&!own?`<span class="tag t-n">Opens outside</span>`:"")+(p.encrypted?`<span class="tag t-w">PIN</span>`:"")+(p.audience!=="team"?`<span class="tag t-b">${p.audience==="leadership"?"Leadership":"Managers"}</span>`:"")+(!p.active?`<span class="tag t-r">Hidden</span>`:"");
   return `<a class="pcard${opts.small?" sm":""}" href="${e(href)}"${ext}><b>${e(p.title)}</b>${p.blurb&&!opts.small?`<span>${e(p.blurb)}</span>`:""}${flags?`<span class="tags">${flags}</span>`:""}</a>`;
 }
 function renderSections(keys,filter,showEmpty){
@@ -100,7 +102,7 @@ function renderHome(){
   <div class="sbar"><div class="q"><input id="pq" type="search" placeholder="Search guides, tools, courses and contacts: “Navien”, “expansion tank”, “Webb”" value="${e(PQ)}" autocomplete="off" aria-label="Search the portal"></div></div>
   <div id="presults">${renderResults()}</div>
   <div id="phome"${PQ.trim()?" hidden":""}>
-    <div class="pquick">${quick.map(p=>`<a href="${e(p.kind==="link"?p.url:"#p/"+p.slug)}"${p.kind==="link"?' target="_blank" rel="noopener"':""}>${e(p.title)}</a>`).join("")}<a href="#portal/contacts">Contacts</a></div>
+    <div class="pquick">${quick.map(p=>{const own=p.kind==="link"&&p.url.includes("/3r-tools/#");return `<a href="${e(p.kind!=="link"?"#p/"+p.slug:own?p.url.slice(p.url.indexOf("#")):p.url)}"${p.kind==="link"&&!own?' target="_blank" rel="noopener"':""}>${e(p.title)}</a>`;}).join("")}<a href="#portal/contacts">Contacts</a></div>
     <section class="pann"><div class="psec-h"><h2>Announcements</h2>${admin?`<button class="btn sm" id="annNew" type="button">New announcement</button>`:""}</div>
       ${EDIT&&EDIT.kind==="ann"&&!EDIT.id?annForm({}):""}
       ${ann.length?ann.map(a=>EDIT&&EDIT.kind==="ann"&&EDIT.id===a.id?annForm(a):annItem(a)).join(""):`<p class="hint">No announcements right now.</p>`}</section>
