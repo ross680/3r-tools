@@ -238,6 +238,7 @@ Object.defineProperty(api,"length",{get:function(){return Object.keys(d).length}
 return new Proxy(api,{get:function(t,p){if(typeof p==="symbol"||p in t)return t[p];return t.getItem(p)===null?undefined:t.getItem(p)},set:function(t,p,v){t.setItem(p,v);return true},deleteProperty:function(t,p){t.removeItem(p);return true}})}
 try{Object.defineProperty(window,"localStorage",{value:mk("local"),configurable:true})}catch(e){}
 try{Object.defineProperty(window,"sessionStorage",{value:mk("session"),configurable:true})}catch(e){}
+window.r3request=function(req){return new Promise(function(res,rej){var rid=Math.random().toString(36).slice(2),t;function on(ev){if(ev.source!==parent||!ev.data||ev.data.r3!=="requestDone"||ev.data.rid!==rid)return;removeEventListener("message",on);clearTimeout(t);ev.data.ok?res(ev.data):rej(new Error(ev.data.error||"Couldn’t send"))}addEventListener("message",on);t=setTimeout(function(){removeEventListener("message",on);rej(new Error("3R Tools didn’t answer"))},20000);parent.postMessage({r3:"request",rid:rid,type:req.type,title:req.title,data:req.data},"*")})};
 document.addEventListener("click",function(ev){var a=ev.target&&ev.target.closest&&ev.target.closest("a[href]");if(!a)return;var m=String(a.href).match(${SITE_RE.toString()});if(m){ev.preventDefault();ev.stopImmediatePropagation();parent.postMessage({r3:"nav",path:m[1]||""},"*")}},true);
 })();<\/script>`;
 }
@@ -246,11 +247,25 @@ function writeStore(slug,name,data){
   if(name!=="local")return;
   try{const s=readStore(slug);s.local=data;localStorage.setItem("r3p:"+slug,JSON.stringify(s));}catch(x){}
 }
+// A page may file a request only of the kind it is listed for here. The database still
+// sets the sender, routing and status, so a page can't send one as someone else.
+const PAGE_REQUESTS={"training-schedule":["training"]};
+async function pageRequest(slug,m,win){
+  const reply=(ok,extra)=>{try{win.postMessage(Object.assign({r3:"requestDone",rid:m.rid,ok},extra),"*");}catch(x){}};
+  if(!(PAGE_REQUESTS[slug]||[]).includes(m.type)||!m.data||typeof m.data!=="object")return reply(false,{error:"This page can’t send that kind of request."});
+  const data={};Object.keys(m.data).slice(0,20).forEach(k=>{const v=m.data[k];if(v!=null&&v!=="")data[String(k).slice(0,40)]=String(v).slice(0,8000);});
+  let row,error;
+  try{({data:row,error}=await C.sb.from("requests").insert({type:m.type,title:String(m.title||"Request").slice(0,200),data}).select("id,assigned_to").single());}
+  catch(x){error=x;}
+  if(error||!row)return reply(false,{error:(error&&error.message)||"Couldn’t send"});
+  reply(true,{id:row.id});C.toast("Request sent. It’s on your Requests tab.");
+}
 let VIEW=null;
 addEventListener("message",ev=>{
   if(!VIEW)return;const fr=document.getElementById("pframe");
   if(!fr||ev.source!==fr.contentWindow||!ev.data||typeof ev.data!=="object")return;
   if(ev.data.r3==="store")writeStore(VIEW,ev.data.name,ev.data.data);
+  else if(ev.data.r3==="request")pageRequest(VIEW,ev.data,fr.contentWindow);
   else if(ev.data.r3==="nav"){
     const path=String(ev.data.path||"").replace(/\/+$/,""),slug=path.split("/").pop();
     if(!slug||slug==="home"){location.hash="#portal";return;}
