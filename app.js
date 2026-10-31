@@ -121,10 +121,12 @@ async function setVendor(v,patch){
 }
 
 /* ---------- routing ---------- */
-const ALL_TABS=[["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
+const ALL_TABS=[["portal","Team Portal"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
 let TABS=ALL_TABS;
-let tab=(location.hash||"#find").slice(1);
-addEventListener("hashchange",()=>{const t=location.hash.slice(1);if(TABS.some(x=>x[0]===t)){tab=t;render();scrollTo(0,0);}});
+/* A route is a tab key, or a Team Portal route: "portal/contacts" or "p/<page>". */
+const tabOf=r=>r.startsWith("p/")?"portal":r.split("/")[0];
+let route=location.hash.slice(1),tab=tabOf(route);
+addEventListener("hashchange",()=>{const r=location.hash.slice(1),t=tabOf(r);if(TABS.some(x=>x[0]===t)){route=r;tab=t;render();scrollTo(0,0);}});
 let Q="",WANT=1,VFILTER="All";
 
 /* ---------- search ---------- */
@@ -562,13 +564,15 @@ async function saveImport(){
 
 /* ---------- people (admin) ---------- */
 function renderPeople(){
-  return `<h1>People</h1><p class="lead">Who can sign in to 3R Tools. Admins add purchases, fix categories and manage this list. Staff find items, build return lists and see vendor spend.</p>
+  const ROLES=[["staff","Team"],["manager","Manager"],["admin","Leadership"]];
+  const roleSel=(attr,cur,dis)=>`<select ${attr} ${dis?"disabled":""}>${ROLES.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select>`;
+  return `<h1>People</h1><p class="lead">Who can sign in to 3R Tools and what they see. <b>Team</b> sees the Team Portal, finds items, builds return lists and sees vendor spend. <b>Manager</b> also sees manager pages and portals. <b>Leadership</b> sees everything and manages purchases, portal content and this list.</p>
   <div class="banner">Adding someone here lets them in once they have a login. Create the login in Supabase: Authentication → Users → Add user, with the same email and a password you give them.</div>
   <section class="panel"><div class="tw"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Can sign in</th></tr></thead><tbody>
   ${PEOPLE.map(p=>`<tr><td data-l="Name"><input value="${esc(p.name)}" data-pname="${esc(p.email)}" aria-label="Name"></td><td data-l="Email">${esc(p.email)}</td>
-  <td data-l="Role"><select data-prole="${esc(p.email)}" ${p.email===profile.email?"disabled":""}><option value="staff" ${p.role==="staff"?"selected":""}>Staff</option><option value="admin" ${p.role==="admin"?"selected":""}>Admin</option></select></td>
+  <td data-l="Role">${roleSel(`data-prole="${esc(p.email)}"`,p.role,p.email===profile.email)}</td>
   <td data-l="Can sign in"><input type="checkbox" data-pact="${esc(p.email)}" ${p.active?"checked":""} ${p.email===profile.email?"disabled":""}></td></tr>`).join("")}</tbody></table></div></section>
-  <form class="panel maps" id="addp"><label class="fl">Name<input id="pn" required></label><label class="fl">Email<input id="pe" type="email" required></label><label class="fl">Role<select id="pr"><option value="staff">Staff</option><option value="admin">Admin</option></select></label><button class="btn" type="submit">Add person</button></form>`;
+  <form class="panel maps" id="addp"><label class="fl">Name<input id="pn" required></label><label class="fl">Email<input id="pe" type="email" required></label><label class="fl">Role${roleSel('id="pr"',"staff",false)}</label><button class="btn" type="submit">Add person</button></form>`;
 }
 function bindPeople(){
   const save=async(email,patch)=>{const{error}=await sb.from("app_users").update(patch).eq("email",email);if(error)fail(error);else toast("Saved");await loadPeople();};
@@ -607,9 +611,11 @@ function renderAbout(){
 
 /* ---------- render ---------- */
 function render(){
-  if(!TABS.some(t=>t[0]===tab))tab="find";
+  if(!TABS.some(t=>t[0]===tab)){tab="portal";route="portal";}
   const openN=RET.filter(x=>x.status!=="closed").length;
   $("#tabs").innerHTML=TABS.map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}</a>`).join("");
+  if(tab==="portal"){window.R3Portal.render(route.startsWith("p/")?route:route.split("/").slice(1).join("/"));return;}
+  $("#app").classList.remove("wide");
   if(tab==="find"){
     const qEl=$("#q"),hadFocus=qEl&&document.activeElement===qEl,pos=qEl?qEl.selectionStart:0;
     $("#app").innerHTML=renderFind();
@@ -715,14 +721,15 @@ async function start(session){
   me=session.user.id;
   const email=(session.user.email||"").toLowerCase();
   $("#signOut").hidden=false;
-  $("#app").innerHTML='<p class="lead">Loading purchase history…</p>';
+  $("#app").innerHTML='<p class="lead">Loading…</p>';
   const{data:p}=await sb.from("app_users").select("*").eq("email",email).maybeSingle();
   if(!p||!p.active){$("#app").innerHTML=`<div class="warnbox"><b>${esc(email)} isn’t on the 3R Tools list.</b><br>Ask an admin to add you under People.</div>`;return;}
   profile=p;isAdmin=p.role==="admin";
   $("#who").textContent=p.name||p.email;
   TABS=ALL_TABS.filter(t=>!t[2]||isAdmin);
-  try{await Promise.all([loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
-  catch(e){console.error(e);$("#app").innerHTML=`<div class="warnbox">The purchase data couldn’t load. Reload the page. If it keeps happening, sign out and back in.</div>`;return;}
+  const portalCtx={sb,esc,toast,fail,fmtDate,render:()=>render(),profile:()=>profile,isAdmin:()=>isAdmin};
+  try{await Promise.all([window.R3Portal.load(portalCtx),loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
+  catch(e){console.error(e);$("#app").innerHTML=`<div class="warnbox">3R Tools couldn’t load. Reload the page. If it keeps happening, sign out and back in.</div>`;return;}
   render();
   let t=null;const soon=()=>{clearTimeout(t);t=setTimeout(refreshReturns,300);};
   sb.channel("returns").on("postgres_changes",{event:"*",schema:"public",table:"return_lines"},soon).on("postgres_changes",{event:"*",schema:"public",table:"vendors"},soon).subscribe();
