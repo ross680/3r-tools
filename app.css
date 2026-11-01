@@ -198,3 +198,7 @@ nav.tabs a .ct.hot{background:var(--bad);color:#fff}
 .poedit input{font-size:13px;padding:5px 6px;width:100%;min-width:70px}.poedit td:nth-child(2) input{min-width:200px}.poedit tfoot th{text-align:right}
 .rcvbar{margin:12px 0 4px}
 @media print{.tabs,header,.pacts,.chips,.sbar,.crumb,#toast{display:none!important}.cboardwrap{border:0}}
+.posecs{margin:0 0 10px}.posecs a{text-decoration:none;color:inherit}
+.rqpick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}.rqpick select{max-width:180px}
+.vform{grid-column:1/-1}
+.posecs .chip.on{background:var(--blue);border-color:var(--blue);color:#fff}.posecs .chip.on .ct{background:rgba(255,255,255,.25);color:#fff}

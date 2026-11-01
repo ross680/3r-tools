@@ -4,11 +4,14 @@
    through public.po_receive, which adds a stock PO's items to the warehouse for Inventory. */
 (function(){
 "use strict";
-let C=null,POS=[],LINES=[],VENDORS=[],ITEMS=[],IV=[],RECEIPTS={},VIEW="open",Q="",DRAFT=null,ERR="",RCV=null;
+let C=null,POS=[],LINES=[],VENDORS=[],ITEMS=[],IV=[],RECEIPTS={},VIEW="open",Q="",DRAFT=null,ERR="",RCV=null,LIMIT=null,PREQ=[],VEDIT=null,RQPICK=null;
 const ST={Draft:["Draft","t-n"],Pending:["Needs approval","t-w"],Approved:["Approved, not ordered","t-b"],Ordered:["Ordered","t-b"],Received:["Received","t-g"],Rejected:["Rejected","t-r"],Canceled:["Canceled","t-n"]};
 const VIEWS=[["open","Open"],["Pending","Needs approval"],["Draft","Drafts"],["Approved","To order"],["Ordered","Waiting to arrive"],["Received","Received"],["all","All"]];
 const e=s=>C.esc(s);
 const mgr=()=>["manager","admin"].includes(C.profile().role);
+const admin=()=>C.profile().role==="admin";
+const oldPortal=p=>String(p.source||"").startsWith("Old portal");
+const overLimit=p=>LIMIT!=null&&!admin()&&total(linesOf(p.id))>LIMIT;
 const me=()=>String(C.profile().email||"").toLowerCase();
 const money=n=>"$"+(Math.round((+n||0)*100)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const num=n=>{n=+n||0;return Number.isInteger(n)?String(n):String(Math.round(n*100)/100);};
@@ -22,8 +25,10 @@ const total=ls=>ls.reduce((a,l)=>a+(+l.qty||0)*(+l.unit_cost||0),0);
 async function all(t,cols,f){const out=[];for(let i=0;;i+=1000){let q=C.sb.from(t).select(cols).range(i,i+999);if(f)q=f(q);const{data,error}=await q;if(error)throw error;out.push(...data);if(data.length<1000)break;}return out;}
 async function load(ctx){
   C=ctx;
-  const[p,l,v]=await Promise.all([all("po_orders","*",q=>q.order("created_at",{ascending:false})),all("po_lines","*"),all("vendors","id,name,email,phone,rep,account,active",q=>q.order("name"))]);
+  const[p,l,v,st,rq]=await Promise.all([all("po_orders","*",q=>q.order("created_at",{ascending:false})),all("po_lines","*"),all("vendors","id,name,email,phone,rep,account,terms,st_vendor_id,aliases,active",q=>q.order("name")),
+    C.sb.from("po_settings").select("key,value"),C.sb.from("requests").select("id,title,data,status,requested_by,requested_by_name,assigned_to,created_at").eq("type","tool").in("status",["new","in_progress"]).order("created_at")]);
   POS=p;LINES=l;VENDORS=v;
+  const lim=(st.data||[]).find(x=>x.key==="manager_approval_limit");LIMIT=lim?Number(lim.value):null;PREQ=rq.data||[];
   if(!load.live){load.live=1;let t=null;const soon=()=>{clearTimeout(t);t=setTimeout(refresh,500);};
     C.sb.channel("po-live").on("postgres_changes",{event:"*",schema:"public",table:"po_orders"},soon).on("postgres_changes",{event:"*",schema:"public",table:"po_lines"},soon).subscribe();}
 }
@@ -45,17 +50,25 @@ function renderList(){
   const match=p=>!q||[p.id,p.st_number,vname(p.vendor_id),p.job,p.customer,p.note,p.requested_by].join(" ").toLowerCase().includes(q)||linesOf(p.id).some(l=>[l.code,l.description,l.vendor_part].join(" ").toLowerCase().includes(q));
   const list=POS.filter(p=>inView(p)&&match(p));
   const n=k=>k==="all"?POS.length:k==="open"?POS.filter(p=>["Draft","Pending","Approved","Ordered","Rejected"].includes(p.status)).length:POS.filter(p=>p.status===k).length;
-  return `<h1>Purchasing</h1><p class="lead">Purchase orders for stock and jobs. Anyone can start one; managers approve and order it; whoever unloads the truck receives it. Received stock goes straight into Inventory.</p>
-  <div class="btnrow pacts"><a class="btn" href="#po/new">New PO</a><a class="btn ghost" href="inventory/">Inventory (recommended POs)</a></div>
+  return `${sections("po")}<h1>Purchasing</h1><p class="lead">Purchase orders for stock and jobs. Anyone can start one; managers approve and order it${LIMIT!=null?` (up to ${money(LIMIT)}; above that, leadership)`:""}; whoever unloads the truck receives it. Received stock goes straight into Inventory.</p>
+  <div class="btnrow pacts"><a class="btn" href="#po/new">New PO</a><a class="btn ghost" href="inventory/#reorder">Reorder from Inventory</a>${admin()?`<button class="btn ghost" type="button" id="poLimit">Approval limit${LIMIT!=null?": "+money(LIMIT):""}</button>`:""}</div>
   <div class="chips">${VIEWS.map(([k,l])=>`<button class="chip${VIEW===k?" on":""}" type="button" data-view="${k}">${l}${n(k)?` <span class="ct${k==="Pending"&&mgr()?" hot":""}">${n(k)}</span>`:""}</button>`).join("")}</div>
   <div class="sbar"><div class="q"><input id="poq" type="search" placeholder="Search PO, vendor, job, item or part number" value="${e(Q)}" autocomplete="off" aria-label="Search purchase orders"></div></div>
   ${list.length?`<div class="rqlist">${list.map(p=>{const ls=linesOf(p.id);
     return `<a class="rqrow" href="#po/${encodeURIComponent(p.id)}"><div class="rqmain"><b>${e(p.id)}${p.st_number?` · ST ${e(p.st_number)}`:""} · ${e(vname(p.vendor_id))}</b>
       <span>${e(p.job||"Stock")}${p.customer?` · ${e(p.customer)}`:""} · ${ls.length} line${ls.length===1?"":"s"} · ${money(p.total)} · ${e(p.requested_by||"")} · ${day(p.created_at)}</span></div>
-      <div class="rqside">${pill(p.status)}${partly(p)?`<span class="hint">Partly received</span>`:""}</div></a>`;}).join("")}</div>`
+      <div class="rqside">${pill(p.status)}${partly(p)?`<span class="hint">Partly received</span>`:""}${oldPortal(p)?`<span class="hint">From the old portal</span>`:""}</div></a>`;}).join("")}</div>`
     :`<div class="empty">${POS.length?"No purchase orders match.":"No purchase orders yet. Start one with New PO, or create them from Inventory’s recommended POs."}</div>`}`;
 }
+function sections(on){
+  const n=PREQ.length;
+  return `<div class="chips posecs"><a class="chip${on==="po"?" on":""}" href="#po">Purchase orders</a><a class="chip${on==="requests"?" on":""}" href="#po/requests">Parts requests${n?` <span class="ct hot">${n}</span>`:""}</a><a class="chip${on==="vendors"?" on":""}" href="#po/vendors">Vendors</a></div>`;
+}
 function bindList(){
+  const lb=document.getElementById("poLimit");
+  if(lb)lb.onclick=async()=>{const v=prompt("Managers can approve POs up to this many dollars. Above it, leadership approves.",LIMIT==null?"1000":String(LIMIT));if(v===null)return;
+    const n=Number(String(v).replace(/[$,\s]/g,""));if(!isFinite(n)||n<0){C.toast("That isn’t a dollar amount");return;}
+    const{error}=await C.sb.from("po_settings").upsert({key:"manager_approval_limit",value:n});if(error){C.fail(error);return;}C.toast("Approval limit saved");await load(C);C.render();};
   document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;C.render();});
   const q=document.getElementById("poq");
   q.oninput=()=>{Q=q.value;clearTimeout(bindList.t);bindList.t=setTimeout(()=>{C.render();const n=document.getElementById("poq");n.focus();n.setSelectionRange(n.value.length,n.value.length);},150);};
@@ -68,9 +81,11 @@ function renderPO(p){
   const fact=(l,val)=>val?`<div class="rqfact"><span>${l}</span><b>${val}</b></div>`:"";
   const acts=[];
   if(["Draft","Rejected"].includes(p.status))acts.push(`<button class="btn" type="button" data-to="Pending">Send for approval</button>`);
-  if(p.status==="Pending"&&mgr())acts.push(`<button class="btn" type="button" data-to="Approved">Approve</button><button class="btn danger" type="button" data-to="Rejected">Reject</button>`);
+  if(p.status==="Pending"&&mgr())acts.push(overLimit(p)?`<span class="hint">Over the ${money(LIMIT)} approval limit, so leadership approves it.</span><button class="btn danger" type="button" data-to="Rejected">Reject</button>`
+    :`<button class="btn" type="button" data-to="Approved">Approve</button><button class="btn danger" type="button" data-to="Rejected">Reject</button>`);
   if(p.status==="Pending"&&!mgr())acts.push(`<span class="hint">Waiting for a manager to approve it.</span>`);
   if(p.status==="Approved"&&mgr())acts.push(`<button class="btn" type="button" id="poOrder">Mark ordered</button>`);
+  if(["Draft","Rejected"].includes(p.status)&&mgr()&&overLimit(p))acts.push(`<span class="hint">Leadership has to approve anything over ${money(LIMIT)}.</span>`);
   if(canRcv)acts.push(`<button class="btn${p.status==="Ordered"?"":" ghost"}" type="button" id="poRcv">Receive</button>`);
   if(edit)acts.push(`<a class="btn ghost" href="#po/${encodeURIComponent(p.id)}/edit">Edit</a>`);
   if(p.status==="Pending")acts.push(`<button class="btn ghost" type="button" data-to="Draft">Back to draft</button>`);
@@ -83,6 +98,7 @@ function renderPO(p){
   <div class="rqfacts">${fact("Vendor",e(vname(p.vendor_id))+(v.rep?` · ${e(v.rep)}`:"")+(v.phone?` · <a href="tel:${e(v.phone)}">${e(v.phone)}</a>`:"")+(v.account?` · acct ${e(v.account)}`:""))}${fact("For",e(p.job||"Stock")+(p.customer?` · ${e(p.customer)}`:""))}
     ${fact("Total",money(p.total))}${fact("Asked for by",e(p.requested_by)+" · "+day(p.created_at))}${fact("Approved",p.approved_at?e(p.approved_by)+" · "+day(p.approved_at):"")}
     ${fact("Ordered",p.ordered_at?day(p.ordered_at)+(p.sent_to?" · "+e(p.sent_to):""):"")}${fact("Received",p.received_at?day(p.received_at):"")}${fact("ServiceTitan PO",e(p.st_number))}${fact("Source",e(p.source))}</div>
+  ${oldPortal(p)?`<div class="banner">Copied from the old Warehouse &amp; Purchasing portal on Oct 26.${p.st_number?" ServiceTitan has the current status of this PO.":""}</div>`:""}
   ${p.note?`<div class="rqnote">${e(p.note)}</div>`:""}
   ${ERR?`<div class="warnbox">${e(ERR)}</div>`:""}
   <div class="btnrow pacts">${rc?"":acts.join("")}</div>
@@ -211,11 +227,87 @@ function bindEdit(){
   };
 }
 
+/* ---------- parts requests (Requests → Tool or part) ---------- */
+const reqLine=r=>LINES.find(l=>l.request_id===r.id);
+function renderRequests(){
+  const vs=VENDORS.filter(v=>v.active!==false);
+  const row=r=>{const d=r.data||{},on=reqLine(r),po=on&&POS.find(p=>p.id===on.po_id);
+    return `<div class="rqrow"><div class="rqmain"><b>${e(d.item||r.title)}</b>
+      <span>${d.qty?`${e(num(d.qty))} · `:""}${d.job?`Job ${e(d.job)} · `:"Stock · "}${d.needed_by?`needed ${day(d.needed_by+"T12:00:00")} · `:""}${d.truck?`truck ${e(d.truck)} · `:""}from ${e(r.requested_by_name||r.requested_by)} · ${day(r.created_at)}</span>
+      ${d.note?`<span>${e(d.note)}</span>`:""}</div>
+      <div class="rqside">${po?`<a class="tag t-b" href="#po/${encodeURIComponent(po.id)}">On ${e(po.id)}</a>`
+        :RQPICK===r.id?`<div class="rqpick"><select id="rqV" aria-label="Vendor"><option value="">Pick a vendor</option>${vs.map(v=>`<option value="${v.id}">${e(v.name)}</option>`).join("")}</select>
+          <input id="rqC" class="pin" inputmode="decimal" placeholder="Cost each" aria-label="Cost each"><button class="btn sm" type="button" data-rqadd="${r.id}">Add</button><button class="btn ghost sm" type="button" data-rqcancel>Cancel</button></div>`
+        :`<button class="btn sm" type="button" data-rqpick="${r.id}">Add to a PO</button>`}
+        <a class="linkbtn" href="#requests/${r.id}">Open request</a></div></div>`;};
+  return `${sections("requests")}<h1>Parts requests</h1>
+  <p class="lead">Open “Tool or part” requests from the Requests tab. Add one to a PO and it goes on that vendor’s draft for the same job (or a new draft), linked back to the request.</p>
+  ${PREQ.length?`<div class="rqlist">${PREQ.map(row).join("")}</div>`:`<div class="empty">No open parts requests.</div>`}`;
+}
+function bindRequests(){
+  document.querySelectorAll("[data-rqpick]").forEach(b=>b.onclick=()=>{RQPICK=b.dataset.rqpick;C.render();});
+  document.querySelectorAll("[data-rqcancel]").forEach(b=>b.onclick=()=>{RQPICK=null;C.render();});
+  document.querySelectorAll("[data-rqadd]").forEach(b=>b.onclick=async()=>{
+    const r=PREQ.find(x=>x.id===b.dataset.rqadd),d=r.data||{},vid=document.getElementById("rqV").value,cost=Number(document.getElementById("rqC").value||0);
+    if(!vid){C.toast("Pick a vendor");return;}
+    if(!isFinite(cost)||cost<0){C.toast("The cost isn’t a number");return;}
+    b.disabled=true;
+    try{
+      const job=String(d.job||"").trim()||"Stock";
+      let po=POS.find(p=>p.status==="Draft"&&p.vendor_id===vid&&String(p.job).toLowerCase()===job.toLowerCase());
+      if(!po){const n=await C.sb.rpc("next_po_number");if(n.error)throw n.error;
+        const{error}=await C.sb.from("po_orders").insert({id:n.data,vendor_id:vid,job,status:"Draft",source:"Parts request",total:0,note:""});if(error)throw error;po={id:n.data};}
+      const ls=linesOf(po.id),qty=Number(d.qty)||1;
+      const{error}=await C.sb.from("po_lines").insert({po_id:po.id,line_no:ls.length+1,code:"",description:String(d.item||r.title).slice(0,200),qty,unit_cost:cost,request_id:r.id});if(error)throw error;
+      await C.sb.from("po_orders").update({total:Math.round((total(ls)+qty*cost)*100)/100}).eq("id",po.id);
+      const a=await C.sb.rpc("request_act",{p_id:r.id,p_action:r.status==="new"?"start":"comment",p_note:`Added to ${po.id}`,p_assign:null});
+      RQPICK=null;C.toast(`Added to ${po.id}`+(a.error?" (the request wasn’t updated: only the person it’s routed to can)":""));
+      await load(C);C.render();
+    }catch(x){b.disabled=false;C.fail(x);}
+  });
+}
+
+/* ---------- vendors ---------- */
+function renderVendors(){
+  const f=(v,k,l,type)=>`<label class="fl"><span>${l}</span><input data-vf="${k}" ${type?`type="${type}"`:""} value="${e(v[k]==null?"":v[k])}"></label>`;
+  const card=v=>VEDIT===v.id?`<form class="panel rqform vform" data-vid="${v.id}"><div class="maps">${f(v,"name","Name")}${f(v,"rep","Rep")}${f(v,"phone","Phone","tel")}${f(v,"email","Email","email")}${f(v,"account","Our account #")}${f(v,"terms","Terms")}${f(v,"st_vendor_id","ServiceTitan vendor ID")}</div>
+      <label class="ccheck"><input type="checkbox" data-vf="active"${v.active!==false?" checked":""}> Active</label>
+      <div class="btnrow" style="margin-top:10px"><button class="btn" type="submit">Save</button><button class="btn ghost" type="button" data-vcancel>Cancel</button></div></form>`
+    :`<div class="wcard${v.active===false?" off":""}"><b>${e(v.name)}</b>
+      ${v.rep?`<div class="wrow"><span>Rep</span><span>${e(v.rep)}</span></div>`:""}
+      ${v.phone?`<div class="wrow"><span>Phone</span><a href="tel:${e(v.phone)}">${e(v.phone)}</a></div>`:""}
+      ${v.email?`<div class="wrow"><span>Email</span><a href="mailto:${e(v.email)}">${e(v.email)}</a></div>`:""}
+      ${v.account?`<div class="wrow"><span>Account</span><span>${e(v.account)}</span></div>`:""}
+      ${v.terms?`<div class="wrow"><span>Terms</span><span>${e(v.terms)}</span></div>`:""}
+      <div class="wrow"><span>POs</span><span>${POS.filter(p=>p.vendor_id===v.id).length}${v.st_vendor_id?" · in ServiceTitan":""}</span></div>
+      ${mgr()?`<button class="linkbtn" type="button" data-vedit="${v.id}">Edit</button>`:""}</div>`;
+  return `${sections("vendors")}<h1>Vendors</h1><p class="lead">Who we buy from, and how to reach them.${mgr()?" Managers and leadership can update the details.":""}</p>
+  ${admin()?`<div class="btnrow pacts"><button class="btn ghost" type="button" id="vNew">Add a vendor</button></div>`:""}
+  ${VEDIT==="new"?card({id:"new",name:"",active:true}).replace("data-vid=\"new\"","data-vid=\"\""):""}
+  <div class="wgrid">${VENDORS.map(card).join("")}</div>`;
+}
+function bindVendors(){
+  const nb=document.getElementById("vNew");if(nb)nb.onclick=()=>{VEDIT="new";C.render();};
+  document.querySelectorAll("[data-vedit]").forEach(b=>b.onclick=()=>{VEDIT=b.dataset.vedit;C.render();});
+  document.querySelectorAll("[data-vcancel]").forEach(b=>b.onclick=()=>{VEDIT=null;C.render();});
+  document.querySelectorAll("form.vform").forEach(f=>f.onsubmit=async ev=>{ev.preventDefault();
+    const row={};f.querySelectorAll("[data-vf]").forEach(i=>{row[i.dataset.vf]=i.type==="checkbox"?i.checked:i.value.trim();});
+    if(!row.name){C.toast("A vendor needs a name");return;}
+    row.st_vendor_id=row.st_vendor_id?Number(row.st_vendor_id):null;
+    if(row.st_vendor_id!=null&&!Number.isInteger(row.st_vendor_id)){C.toast("The ServiceTitan ID is a number");return;}
+    const id=f.dataset.vid,btn=f.querySelector("button[type=submit]");btn.disabled=true;
+    const{error}=id?await C.sb.from("vendors").update(row).eq("id",id):await C.sb.from("vendors").insert(row);
+    if(error){btn.disabled=false;C.fail(error);return;}
+    VEDIT=null;C.toast("Vendor saved");await load(C);C.render();});
+}
+
 /* ---------- entry ---------- */
 function render(route){
   const app=document.getElementById("app");app.classList.add("wide");
   const parts=String(route||"").split("/").map(decodeURIComponent).filter(Boolean);
   if(!parts.length){DRAFT=null;RCV=null;app.classList.remove("wide");app.innerHTML=renderList();bindList();return;}
+  if(parts[0]==="requests"){DRAFT=null;app.classList.remove("wide");app.innerHTML=renderRequests();bindRequests();return;}
+  if(parts[0]==="vendors"){DRAFT=null;app.classList.remove("wide");app.innerHTML=renderVendors();bindVendors();return;}
   if(parts[0]==="new"){if(!DRAFT||DRAFT.id){startEdit(null);app.innerHTML='<p class="lead">Loading items…</p>';return;}app.innerHTML=renderEdit();bindEdit();return;}
   const p=POS.find(x=>x.id===parts[0]);
   if(!p){app.innerHTML=`<p class="crumb"><a href="#po">Purchasing</a></p><div class="empty">That PO isn’t here.</div>`;return;}
