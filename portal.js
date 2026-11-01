@@ -104,6 +104,7 @@ function renderHome(){
   <div class="sbar"><div class="q"><input id="pq" type="search" placeholder="Search guides, tools, courses and contacts: “Navien”, “expansion tank”, “Webb”" value="${e(PQ)}" autocomplete="off" aria-label="Search the portal"></div></div>
   <div id="presults">${renderResults()}</div>
   <div id="phome"${PQ.trim()?" hidden":""}>
+    ${window.R3OnCall?window.R3OnCall.homeCard():""}
     <div class="pquick">${quick.map(p=>{const own=p.kind==="link"&&p.url.includes("/3r-tools/#");return `<a href="${e(p.kind!=="link"?"#p/"+p.slug:own?p.url.slice(p.url.indexOf("#")):p.url)}"${p.kind==="link"&&!own?' target="_blank" rel="noopener"':""}>${e(p.title)}</a>`;}).join("")}<a href="#portal/contacts">Contacts</a></div>
     <section class="pann"><div class="psec-h"><h2>Announcements</h2>${admin?`<button class="btn sm" id="annNew" type="button">New announcement</button>`:""}</div>
       ${EDIT&&EDIT.kind==="ann"&&!EDIT.id?annForm({}):""}
@@ -331,6 +332,7 @@ function render(route){
   const app=document.getElementById("app");
   if(route.startsWith("p/")){
     const slug=route.slice(2);
+    if(REPLACED[slug]){location.replace("#"+REPLACED[slug]);return;}
     if(VIEW!==slug){NOTICE="";if(EDIT&&EDIT.kind==="page")EDIT=null;}
     VIEW=slug;app.innerHTML=renderViewer(slug);app.classList.add("wide");bindViewer(slug);return;
   }
@@ -341,6 +343,8 @@ function render(route){
   app.innerHTML=renderHome();bindHome();
   if(had){const n=document.getElementById("pq");n.focus();n.setSelectionRange(n.value.length,n.value.length);}
 }
+// Pages rebuilt as 3R Tools screens. Old links to them land on the new screen.
+const REPLACED={"on-call":"oncall","who-owns-what-who-to-call":"whotocall"};
 function tabFor(slug){const p=PBY[slug];return p?tabOfSection(p.section):"portal";}
 window.R3Portal={load,render,reload,tabFor};
 })();

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your 3R Tools sign-in link</title></head>
+<body style="margin:0;padding:0;background:#eef1f4;font-family:Arial,Helvetica,sans-serif;color:#141414">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f4"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:#111111;padding:16px 22px;border-bottom:4px solid #26A4CB">
+<img src="https://ross680.github.io/3r-tools/email/drop.png" width="24" height="36" alt="" style="vertical-align:middle;border:0">
+<img src="https://ross680.github.io/3r-tools/email/wordmark.png" width="164" height="37" alt="3R Plumbing &amp; Mechanical" style="vertical-align:middle;border:0;margin-left:8px;color:#ffffff;font-weight:bold;font-size:16px">
+</td></tr>
+<tr><td style="padding:26px 22px 8px">
+<h1 style="margin:0 0 12px;font-size:21px;line-height:1.3">Your 3R Tools sign-in link</h1>
+<p style="margin:0 0 10px;font-size:15px;line-height:1.55">Press the button to sign in to 3R Tools. No password needed this time.</p>
+</td></tr>
+<tr><td style="padding:10px 22px 4px">
+<a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#26A4CB;color:#ffffff;text-decoration:none;font-weight:bold;font-size:16px;padding:12px 22px;border-radius:9px">Sign in to 3R Tools</a>
+</td></tr>
+<tr><td style="padding:14px 22px 24px;font-size:13.5px;line-height:1.5;color:#555555">
+<p style="margin:0 0 10px;font-size:15px;line-height:1.55">The link works once and expires in an hour. If you didn’t ask for it, ignore this email.</p>
+<p style="margin:12px 0 0">If the button doesn&rsquo;t work, copy this link into your browser:<br><a href="{{ .ConfirmationURL }}" style="color:#1b7fa0;word-break:break-all">{{ .ConfirmationURL }}</a></p>
+</td></tr>
+<tr><td style="background:#f6f7f9;padding:14px 22px;font-size:12px;line-height:1.5;color:#777777">
+3R Plumbing &amp; Mechanical &middot; 77 Accord Park Dr, Suite D6, Norwell MA 02061 &middot; 781-974-5239<br>
+You got this email because of the 3R Tools account for {{ .Email }}.
+</td></tr>
+</table></td></tr></table></body></html>

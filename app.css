@@ -174,3 +174,21 @@ nav.tabs a .ct.hot{background:var(--bad);color:#fff}
 .pwhy{margin:14px 0 0;padding-left:18px;font-size:14px;color:var(--ink2)}.pwhy li{margin:3px 0}
 .rqform .maps .fl.full,.panel .maps .fl.full{flex-basis:100%}
 .cboard thead th:first-child{position:sticky;left:0;background:var(--panel);z-index:1}.cboard tbody th{z-index:1}
+/* on call and who to call */
+.ochome{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:10px;padding:10px 14px;margin:0 0 12px;text-decoration:none;color:inherit;font-size:14.5px}
+.ochome:hover{background:var(--soft)}.ochome b{margin-right:6px}
+.ocdot{flex:0 0 10px;height:10px;border-radius:50%;background:var(--good);box-shadow:0 0 0 4px rgba(44,154,91,.18)}
+.ocnow{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.occard .psec-h{margin-bottom:8px}.ocrow{display:flex;flex-wrap:wrap;gap:10px}
+.ocwho{flex:1 1 150px;display:flex;flex-direction:column;gap:4px;background:var(--bg);border-radius:8px;padding:9px 11px}
+.ocwho>span:first-child{font-size:12px;font-weight:700;color:var(--ink2)}.ocwho b{font-size:16px}.ocwho .btn{align-self:flex-start}.ocwho.none b{color:var(--ink2)}
+.octable td,.octable th{text-align:left}.octable tbody th span{display:block;font-size:11.5px;color:var(--ink2);font-weight:400}
+.octable tr.now th,.octable tr.now td{background:var(--soft)}.octable select,.octable input:not([type=checkbox]){font-size:13px;padding:5px 6px;max-width:170px}
+.occounts{display:flex;flex-wrap:wrap;gap:6px}
+.wchips{margin:0 0 12px}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.wcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:5px}
+.wcard.off{opacity:.6}.wcard>b{font-size:15px;line-height:1.3}
+.wrow{display:grid;grid-template-columns:72px 1fr;gap:8px;font-size:13.5px}.wrow span:first-child{color:var(--ink2);font-weight:700;font-size:12px;padding-top:1px}
+.wph{display:flex;flex-wrap:wrap;gap:5px}.wph a{text-decoration:none}.wcard .linkbtn{align-self:flex-start}
+.wform{grid-column:1/-1}
