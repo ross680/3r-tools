@@ -124,13 +124,15 @@ async function setVendor(v,patch){
 const PORTAL_TABS=["portal","tools","academy","process","portals","presentations"];
 const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["requests","Requests"],["courses","Courses"],["po","Purchasing"],["plan","Scorecard"],["oncall","On call"],["whotocall","Who to call"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
 let TABS=ALL_TABS;
-/* The top bar. Warehouse holds Inventory and the Return Generator screens in a second row. */
-const WH_SUB=["po","find","list","history","spend","import","about"];
-const TOP_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["warehouse","Warehouse"],["requests","Requests"],["people","People",true]];
+/* The top bar. Inventory holds Stock (the inventory page), Purchasing and Returns in a second row;
+   Returns opens a third row with the Return Generator screens. */
+const RET_SUB=["list","find","history","spend","import","about"];
+const WH_SUB=["po",...RET_SUB];
+const TOP_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["warehouse","Inventory"],["requests","Requests"],["people","People",true]];
 /* A route is a tab key, or a Team Portal route: "portal/contacts" or "p/<page>". */
-const tabOf=r=>r.startsWith("p/")?((window.R3Portal&&window.R3Portal.tabFor(r.slice(2)))||"portal"):r==="warehouse"?"find":r.split("/")[0];
+const tabOf=r=>r.startsWith("p/")?((window.R3Portal&&window.R3Portal.tabFor(r.slice(2)))||"portal"):r==="warehouse"?"list":r.split("/")[0];
 let route=location.hash.slice(1),tab=tabOf(route);
-addEventListener("hashchange",()=>{const r=location.hash.slice(1)==="warehouse"?"find":location.hash.slice(1),t=tabOf(r);if(TABS.some(x=>x[0]===t)){route=r;tab=t;render();scrollTo(0,0);}});
+addEventListener("hashchange",()=>{const r=location.hash.slice(1)==="warehouse"?"list":location.hash.slice(1),t=tabOf(r);if(TABS.some(x=>x[0]===t)){route=r;tab=t;render();scrollTo(0,0);}});
 let Q="",WANT=1,VFILTER="All";
 
 /* ---------- search ---------- */
@@ -643,8 +645,9 @@ function drawTabs(){
   const inWH=WH_SUB.includes(tab),top=inWH?"warehouse":tab==="courses"?"academy":tab==="plan"?"presentations":tab==="oncall"||tab==="whotocall"?"tools":tab;
   const ct=k=>k==="warehouse"&&openN?`<span class="ct">${openN}</span>`:k==="requests"&&waitN?`<span class="ct hot">${waitN}</span>`:"";
   $("#tabs").innerHTML=TOP_TABS.filter(t=>!t[2]||isAdmin).map(([k,l])=>`<a href="#${k}" class="${k===top?"on":""}">${l}${ct(k)}</a>`).join("");
-  const sub=$("#subtabs");sub.hidden=!inWH;
-  if(inWH)sub.innerHTML=`<a href="inventory/">Inventory</a>`+TABS.filter(([k])=>WH_SUB.includes(k)).map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}${k==="po"&&poN?`<span class="ct hot">${poN}</span>`:""}</a>`).join("");
+  const sub=$("#subtabs"),sub2=$("#subtabs2"),inRet=RET_SUB.includes(tab);sub.hidden=!inWH;sub2.hidden=!inRet;
+  if(inWH)sub.innerHTML=`<a href="inventory/">Stock</a><a href="#po" class="${tab==="po"?"on":""}">Purchasing${poN?`<span class="ct hot">${poN}</span>`:""}</a><a href="#list" class="${inRet?"on":""}">Returns${openN?`<span class="ct">${openN}</span>`:""}</a>`;
+  if(inRet)sub2.innerHTML=RET_SUB.map(k=>TABS.find(t=>t[0]===k)).filter(Boolean).map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}</a>`).join("");
 }
 function render(){
   if(route.startsWith("p/"))tab=tabOf(route);
