@@ -159,3 +159,18 @@ nav.tabs a .ct.hot{background:var(--bad);color:#fff}
 .cboard td.y{color:var(--good);font-weight:800}.cboard td.m{color:var(--blue-d);font-weight:700}.cboard td.r{color:var(--bad);font-weight:800}.cboard td.na{color:var(--ink2);opacity:.5}
 .vacts{display:flex;gap:8px;flex-wrap:wrap}
 .rqmain .cbar{flex:none;width:180px;max-width:100%;height:7px;margin-top:5px}
+/* scorecard */
+.pyear{flex-direction:row;align-items:center;gap:6px}.pyear select{font-size:14px}
+.ptiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin:0 0 14px}
+.ptile{display:flex;flex-direction:column;gap:2px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:10px 12px;text-decoration:none;color:inherit}
+.ptile.ok{border-left-color:var(--good)}.ptile.no{border-left-color:var(--bad)}
+.ptile>span{font-size:12.5px;color:var(--ink2)}.ptile>span:first-child{font-weight:700}.ptile b{font-size:20px}
+.pacts{margin:0 0 12px}
+.pboard td{min-width:64px;vertical-align:top}.pboard td b{display:block;font-size:14px}.pboard td span{display:block;font-size:11.5px;color:var(--ink2)}
+.pboard td.y b{color:var(--good)}.pboard td.n b{color:var(--bad)}.pboard td.fut span{opacity:.6}
+.pboard td.yr{border-left:2px solid var(--line)}
+.pboard tbody th{min-width:170px;max-width:220px;white-space:normal}.pboard tbody th b{display:block;font-size:13.5px}.pboard tbody th span{display:block;font-size:11.5px;color:var(--ink2);font-weight:400}
+.pin{width:76px;font-size:13px;padding:5px 6px}
+.pwhy{margin:14px 0 0;padding-left:18px;font-size:14px;color:var(--ink2)}.pwhy li{margin:3px 0}
+.rqform .maps .fl.full,.panel .maps .fl.full{flex-basis:100%}
+.cboard thead th:first-child{position:sticky;left:0;background:var(--panel);z-index:1}.cboard tbody th{z-index:1}

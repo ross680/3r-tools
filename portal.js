@@ -79,6 +79,7 @@ function renderTab(t){
   <div class="sbar"><div class="q"><input id="tq" type="search" placeholder="Filter ${e(T.title)}" value="${e(TQ[t]||"")}" autocomplete="off" aria-label="Filter ${e(T.title)}"></div></div>
   ${TQ[t]?"":jumpChips(T.sections)}
   ${t==="academy"&&!TQ[t]&&window.R3Courses?window.R3Courses.academyBlock():""}
+  ${t==="presentations"&&!TQ[t]&&window.R3Plan?window.R3Plan.tabBlock():""}
   <div id="tsecs">${renderSections(T.sections,TQ[t],true)||`<div class="empty">${TQ[t]?`Nothing in ${e(T.title)} matches “${e(TQ[t])}”.`:`Nothing here yet.`}</div>`}</div>`;
 }
 function bindSections(){

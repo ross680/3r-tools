@@ -122,7 +122,7 @@ async function setVendor(v,patch){
 
 /* ---------- routing ---------- */
 const PORTAL_TABS=["portal","tools","academy","process","portals","presentations"];
-const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["requests","Requests"],["courses","Courses"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
+const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["requests","Requests"],["courses","Courses"],["plan","Scorecard"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
 let TABS=ALL_TABS;
 /* The top bar. Warehouse holds Inventory and the Return Generator screens in a second row. */
 const WH_SUB=["find","list","history","spend","import","about"];
@@ -639,7 +639,7 @@ function renderAbout(){
 /* ---------- render ---------- */
 function drawTabs(){
   const openN=RET.filter(x=>x.status!=="closed").length,waitN=window.R3Requests?window.R3Requests.waitingCount():0;
-  const inWH=WH_SUB.includes(tab),top=inWH?"warehouse":tab==="courses"?"academy":tab;
+  const inWH=WH_SUB.includes(tab),top=inWH?"warehouse":tab==="courses"?"academy":tab==="plan"?"presentations":tab;
   const ct=k=>k==="warehouse"&&openN?`<span class="ct">${openN}</span>`:k==="requests"&&waitN?`<span class="ct hot">${waitN}</span>`:"";
   $("#tabs").innerHTML=TOP_TABS.filter(t=>!t[2]||isAdmin).map(([k,l])=>`<a href="#${k}" class="${k===top?"on":""}">${l}${ct(k)}</a>`).join("");
   const sub=$("#subtabs");sub.hidden=!inWH;
@@ -650,6 +650,7 @@ function render(){
   if(!TABS.some(t=>t[0]===tab)){tab="portal";route="portal";}
   drawTabs();
   if(tab==="requests"){window.R3Requests.render(route.split("/").slice(1).join("/"));return;}
+  if(tab==="plan"){window.R3Plan.render();return;}
   if(tab==="courses"){window.R3Courses.render(route.split("/").slice(1).join("/"));return;}
   if(PORTAL_TABS.includes(tab)){window.R3Portal.render(route.startsWith("p/")?route:tab==="portal"?route.split("/").slice(1).join("/"):"tab/"+tab);return;}
   $("#app").classList.remove("wide");
@@ -765,7 +766,7 @@ async function start(session){
   $("#who").textContent=p.name||p.email;
   TABS=ALL_TABS.filter(t=>!t[2]||isAdmin);
   const portalCtx={sb,esc,toast,fail,fmtDate,render:()=>render(),drawTabs:()=>drawTabs(),profile:()=>profile,isAdmin:()=>isAdmin};
-  try{await Promise.all([window.R3Portal.load(portalCtx),window.R3Requests.load(portalCtx),window.R3Courses.load(portalCtx),loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
+  try{await Promise.all([window.R3Portal.load(portalCtx),window.R3Requests.load(portalCtx),window.R3Courses.load(portalCtx),window.R3Plan.load(portalCtx),loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
   catch(e){console.error(e);$("#app").innerHTML=`<div class="warnbox">3R Tools couldn’t load. Reload the page. If it keeps happening, sign out and back in.</div>`;return;}
   render();
   let t=null;const soon=()=>{clearTimeout(t);t=setTimeout(refreshReturns,300);};
