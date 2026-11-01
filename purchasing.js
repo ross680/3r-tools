@@ -4,7 +4,7 @@
    through public.po_receive, which adds a stock PO's items to the warehouse for Inventory. */
 (function(){
 "use strict";
-let C=null,POS=[],LINES=[],VENDORS=[],ITEMS=[],IV=[],RECEIPTS={},VIEW="open",Q="",DRAFT=null,ERR="",RCV=null,LIMIT=null,PREQ=[],VEDIT=null,RQPICK=null;
+let C=null,POS=[],LINES=[],VENDORS=[],ITEMS=[],IV=[],RECEIPTS={},VIEW="open",Q="",DRAFT=null,ERR="",RCV=null,LIMIT=null,PREQ=[],VEDIT=null,RQPICK=null,STS=null,STSET={},STLOG=[],STLOOK=null;
 const ST={Draft:["Draft","t-n"],Pending:["Needs approval","t-w"],Approved:["Approved, not ordered","t-b"],Ordered:["Ordered","t-b"],Received:["Received","t-g"],Rejected:["Rejected","t-r"],Canceled:["Canceled","t-n"]};
 const VIEWS=[["open","Open"],["Pending","Needs approval"],["Draft","Drafts"],["Approved","To order"],["Ordered","Waiting to arrive"],["Received","Received"],["all","All"]];
 const e=s=>C.esc(s);
@@ -22,6 +22,18 @@ const pill=s=>`<span class="tag ${(ST[s]||["",""])[1]}">${e((ST[s]||[s])[0])}</s
 const partly=p=>p.status==="Ordered"&&linesOf(p.id).some(l=>+l.received>0);
 const total=ls=>ls.reduce((a,l)=>a+(+l.qty||0)*(+l.unit_cost||0),0);
 
+/* ServiceTitan goes through the servicetitan Edge Function, which holds the API keys. */
+async function stCall(action,extra){
+  const{data,error}=await C.sb.functions.invoke("servicetitan",{body:Object.assign({action},extra||{})});
+  if(error){let m=error.message;try{const b=await error.context.json();m=b.error||m;}catch(x){}return{ok:false,error:m};}
+  return data||{ok:false,error:"No answer from ServiceTitan"};
+}
+const stOn=()=>STS&&STS.connected;
+async function stAfter(action,po,extra,quiet){
+  if(!stOn())return;
+  const r=await stCall(action,Object.assign({po_id:po},extra||{}));
+  if(!quiet||!r.ok)C.toast(r.ok?(action==="push_po"?(r.already?"Already in ServiceTitan":`Sent to ServiceTitan as ${r.st_number||"a new PO"}`):action==="push_receipt"?"Receipt sent to ServiceTitan":action==="cancel_po"?"Canceled in ServiceTitan":"ServiceTitan updated"):`ServiceTitan: ${r.error}`);
+}
 async function all(t,cols,f){const out=[];for(let i=0;;i+=1000){let q=C.sb.from(t).select(cols).range(i,i+999);if(f)q=f(q);const{data,error}=await q;if(error)throw error;out.push(...data);if(data.length<1000)break;}return out;}
 async function load(ctx){
   C=ctx;
@@ -29,6 +41,7 @@ async function load(ctx){
     C.sb.from("po_settings").select("key,value"),C.sb.from("requests").select("id,title,data,status,requested_by,requested_by_name,assigned_to,created_at").eq("type","tool").in("status",["new","in_progress"]).order("created_at")]);
   POS=p;LINES=l;VENDORS=v;
   const lim=(st.data||[]).find(x=>x.key==="manager_approval_limit");LIMIT=lim?Number(lim.value):null;PREQ=rq.data||[];
+  if(STS===null&&mgr()){STS={};stCall("status").then(r=>{STS=r||{};if(String(location.hash).startsWith("#po"))C.render();});}
   if(!load.live){load.live=1;let t=null;const soon=()=>{clearTimeout(t);t=setTimeout(refresh,500);};
     C.sb.channel("po-live").on("postgres_changes",{event:"*",schema:"public",table:"po_orders"},soon).on("postgres_changes",{event:"*",schema:"public",table:"po_lines"},soon).subscribe();}
 }
@@ -51,7 +64,7 @@ function renderList(){
   const list=POS.filter(p=>inView(p)&&match(p));
   const n=k=>k==="all"?POS.length:k==="open"?POS.filter(p=>["Draft","Pending","Approved","Ordered","Rejected"].includes(p.status)).length:POS.filter(p=>p.status===k).length;
   return `${sections("po")}<h1>Purchasing</h1><p class="lead">Purchase orders for stock and jobs. Anyone can start one; managers approve and order it${LIMIT!=null?` (up to ${money(LIMIT)}; above that, leadership)`:""}; whoever unloads the truck receives it. Received stock goes straight into Inventory.</p>
-  <div class="btnrow pacts"><a class="btn" href="#po/new">New PO</a><a class="btn ghost" href="inventory/#reorder">Reorder from Inventory</a>${admin()?`<button class="btn ghost" type="button" id="poLimit">Approval limit${LIMIT!=null?": "+money(LIMIT):""}</button>`:""}</div>
+  <div class="btnrow pacts"><a class="btn" href="#po/new">New PO</a><a class="btn ghost" href="inventory/#reorder">Reorder from Inventory</a>${mgr()&&stOn()?`<button class="btn ghost" type="button" id="stPull">Refresh from ServiceTitan</button>`:""}${admin()?`<button class="btn ghost" type="button" id="poLimit">Approval limit${LIMIT!=null?": "+money(LIMIT):""}</button>`:""}</div>
   <div class="chips">${VIEWS.map(([k,l])=>`<button class="chip${VIEW===k?" on":""}" type="button" data-view="${k}">${l}${n(k)?` <span class="ct${k==="Pending"&&mgr()?" hot":""}">${n(k)}</span>`:""}</button>`).join("")}</div>
   <div class="sbar"><div class="q"><input id="poq" type="search" placeholder="Search PO, vendor, job, item or part number" value="${e(Q)}" autocomplete="off" aria-label="Search purchase orders"></div></div>
   ${list.length?`<div class="rqlist">${list.map(p=>{const ls=linesOf(p.id);
@@ -62,9 +75,11 @@ function renderList(){
 }
 function sections(on){
   const n=PREQ.length;
-  return `<div class="chips posecs"><a class="chip${on==="po"?" on":""}" href="#po">Purchase orders</a><a class="chip${on==="requests"?" on":""}" href="#po/requests">Parts requests${n?` <span class="ct hot">${n}</span>`:""}</a><a class="chip${on==="vendors"?" on":""}" href="#po/vendors">Vendors</a></div>`;
+  return `<div class="chips posecs"><a class="chip${on==="po"?" on":""}" href="#po">Purchase orders</a><a class="chip${on==="requests"?" on":""}" href="#po/requests">Parts requests${n?` <span class="ct hot">${n}</span>`:""}</a><a class="chip${on==="vendors"?" on":""}" href="#po/vendors">Vendors</a>${mgr()?`<a class="chip${on==="st"?" on":""}" href="#po/servicetitan">ServiceTitan${STS&&STS.configured!==undefined?` <span class="ct${stOn()?"":" hot"}">${stOn()?"on":"off"}</span>`:""}</a>`:""}</div>`;
 }
 function bindList(){
+  const sp=document.getElementById("stPull");
+  if(sp)sp.onclick=async()=>{sp.disabled=true;const r=await stCall("pull");C.toast(r.ok?`Updated ${r.updated} PO${r.updated===1?"":"s"} from ServiceTitan`:`ServiceTitan: ${r.error}`);await load(C);C.render();};
   const lb=document.getElementById("poLimit");
   if(lb)lb.onclick=async()=>{const v=prompt("Managers can approve POs up to this many dollars. Above it, leadership approves.",LIMIT==null?"1000":String(LIMIT));if(v===null)return;
     const n=Number(String(v).replace(/[$,\s]/g,""));if(!isFinite(n)||n<0){C.toast("That isn’t a dollar amount");return;}
@@ -86,6 +101,7 @@ function renderPO(p){
   if(p.status==="Pending"&&!mgr())acts.push(`<span class="hint">Waiting for a manager to approve it.</span>`);
   if(p.status==="Approved"&&mgr())acts.push(`<button class="btn" type="button" id="poOrder">Mark ordered</button>`);
   if(["Draft","Rejected"].includes(p.status)&&mgr()&&overLimit(p))acts.push(`<span class="hint">Leadership has to approve anything over ${money(LIMIT)}.</span>`);
+  if(mgr()&&stOn()&&!p.st_po_id&&["Approved","Ordered"].includes(p.status))acts.push(`<button class="btn ghost" type="button" id="stPush">Send to ServiceTitan</button>`);
   if(canRcv)acts.push(`<button class="btn${p.status==="Ordered"?"":" ghost"}" type="button" id="poRcv">Receive</button>`);
   if(edit)acts.push(`<a class="btn ghost" href="#po/${encodeURIComponent(p.id)}/edit">Edit</a>`);
   if(p.status==="Pending")acts.push(`<button class="btn ghost" type="button" data-to="Draft">Back to draft</button>`);
@@ -97,7 +113,7 @@ function renderPO(p){
   <div class="vtitle"><h1>${e(p.id)}</h1>${pill(p.status)}${partly(p)?`<span class="tag t-w">Partly received</span>`:""}</div>
   <div class="rqfacts">${fact("Vendor",e(vname(p.vendor_id))+(v.rep?` · ${e(v.rep)}`:"")+(v.phone?` · <a href="tel:${e(v.phone)}">${e(v.phone)}</a>`:"")+(v.account?` · acct ${e(v.account)}`:""))}${fact("For",e(p.job||"Stock")+(p.customer?` · ${e(p.customer)}`:""))}
     ${fact("Total",money(p.total))}${fact("Asked for by",e(p.requested_by)+" · "+day(p.created_at))}${fact("Approved",p.approved_at?e(p.approved_by)+" · "+day(p.approved_at):"")}
-    ${fact("Ordered",p.ordered_at?day(p.ordered_at)+(p.sent_to?" · "+e(p.sent_to):""):"")}${fact("Received",p.received_at?day(p.received_at):"")}${fact("ServiceTitan PO",e(p.st_number))}${fact("Source",e(p.source))}</div>
+    ${fact("Ordered",p.ordered_at?day(p.ordered_at)+(p.sent_to?" · "+e(p.sent_to):""):"")}${fact("Received",p.received_at?day(p.received_at):"")}${fact("ServiceTitan PO",e(p.st_number))}${fact("ServiceTitan",e(p.st_sync))}${fact("Source",e(p.source))}</div>
   ${oldPortal(p)?`<div class="banner">Copied from the old Warehouse &amp; Purchasing portal on Oct 26.${p.st_number?" ServiceTitan has the current status of this PO.":""}</div>`:""}
   ${p.note?`<div class="rqnote">${e(p.note)}</div>`:""}
   ${ERR?`<div class="warnbox">${e(ERR)}</div>`:""}
@@ -129,7 +145,12 @@ function bindPO(p){
     const to=b.dataset.to;let extra={};
     if(to==="Canceled"&&!confirm(`Cancel ${p.id}?`))return;
     if(to==="Rejected"){const why=prompt("Why is it rejected? This goes in the note.");if(why===null)return;extra.note=(p.note?p.note+"\n":"")+`Rejected: ${why}`;}
-    b.disabled=true;if(!await setStatus(p,to,extra))b.disabled=false;});
+    b.disabled=true;if(!await setStatus(p,to,extra)){b.disabled=false;return;}
+    if(to==="Approved")await stAfter("push_po",p.id);
+    if(to==="Canceled"&&p.st_po_id)await stAfter("cancel_po",p.id);
+    if(to==="Approved"||to==="Canceled"){await load(C);C.render();}});
+  const sb2=document.getElementById("stPush");
+  if(sb2)sb2.onclick=async()=>{sb2.disabled=true;await stAfter("push_po",p.id);await load(C);C.render();};
   const o=document.getElementById("poOrder");
   if(o)o.onclick=async()=>{const v=VENDORS.find(x=>x.id===p.vendor_id)||{};
     const how=prompt("How was it ordered? (e.g. emailed the rep, phoned, vendor website)",v.email?`Emailed ${v.email}`:"");if(how===null)return;
@@ -148,6 +169,7 @@ function bindPO(p){
     const{data,error}=await C.sb.rpc("po_receive",{p_po:p.id,p_lines:lines,p_slip:document.getElementById("rcvSlip").value.trim()});
     if(error){rs.disabled=false;C.fail(error);return;}
     RCV=null;C.toast(data.complete?"Received in full":"Receipt saved"+(data.stocked?` · ${num(data.stocked)} into the warehouse`:""));
+    if(p.st_po_id)await stAfter("push_receipt",p.id,{lines});
     await load(C);await receipts(p.id);C.render();};
 }
 async function receipts(id){
@@ -301,12 +323,51 @@ function bindVendors(){
     VEDIT=null;C.toast("Vendor saved");await load(C);C.render();});
 }
 
+/* ---------- ServiceTitan ---------- */
+async function stLoad(){
+  const[s,l]=await Promise.all([C.sb.from("st_settings").select("key,value"),C.sb.from("st_log").select("*").order("at",{ascending:false}).limit(25)]);
+  STSET={};(s.data||[]).forEach(r=>STSET[r.key]=r.value);STLOG=l.data||[];
+}
+function renderST(){
+  const st=STS||{},sel=(k,list,blank)=>`<select data-stk="${k}"${admin()?"":" disabled"}><option value="">${blank}</option>${(list||[]).filter(x=>x.active!==false).map(x=>`<option value="${x.id}"${String(STSET[k])===String(x.id)?" selected":""}>${e(x.name)}</option>`).join("")}</select>`;
+  const L=STLOOK;
+  return `${sections("st")}<h1>ServiceTitan</h1>
+  <div class="panel"><div class="psec-h"><h2>Connection</h2></div>
+  ${st.configured===undefined?`<p class="hint">Checking…</p>`:!st.configured?`<p>Not set up yet. Add the ServiceTitan API keys as Supabase secrets (steps in <code>docs/servicetitan-setup.md</code>). Until then, POs are entered in ServiceTitan by hand.</p>`
+    :st.connected?`<p><span class="tag t-g">Connected</span> Tenant ${e(st.tenant)}. Approving a PO sends it to ServiceTitan; receiving and canceling update it there too.</p>`
+    :`<p><span class="tag t-r">Can’t sign in</span> ${e(st.error||"")}</p>`}</div>
+  ${stOn()?`<div class="panel"><div class="psec-h"><h2>Defaults for new POs</h2>${L?"":`<button class="btn ghost sm" type="button" id="stLook">Load choices from ServiceTitan</button>`}</div>
+    <p class="hint">Blank means: use what most recent ServiceTitan POs use.${admin()?"":" Leadership changes these."}</p>
+    ${L?`<div class="maps"><label class="fl">Business unit${sel("business_unit_id",L.businessUnits,"Most common")}</label><label class="fl">Inventory location${sel("inventory_location_id",L.warehouses,"Most common")}</label>
+      <label class="fl">PO type for job POs${sel("type_job_id",L.types,"Most common")}</label><label class="fl">PO type for stock POs${sel("type_stock_id",L.types,"Warehouse Supplies")}</label>
+      <label class="fl">Catch-all pricebook item ID<input data-stk="misc_sku_id" value="${e(STSET.misc_sku_id??"")}" inputmode="numeric"${admin()?"":" disabled"}></label></div>
+      ${admin()?`<div class="btnrow" style="margin-top:10px"><button class="btn" type="button" id="stSave">Save defaults</button><button class="btn ghost" type="button" id="stMatch">Match vendors to ServiceTitan</button></div>`:""}`:""}</div>`:""}
+  <section class="psec"><div class="psec-h"><h2>Recent calls</h2></div>${STLOG.length?`<ul class="rqhist">${STLOG.map(x=>`<li>${new Date(x.at).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})} · ${e(x.by_email)} · ${e(x.action)}${x.ref?` ${e(x.ref)}`:""} · ${x.ok?`<span class="tag t-g">ok</span>`:`<span class="tag t-r">failed</span>`}<div class="hint">${e(x.detail.slice(0,240))}</div></li>`).join("")}</ul>`:`<p class="hint">Nothing sent yet.</p>`}</section>`;
+}
+function bindST(){
+  const lk=document.getElementById("stLook");
+  if(lk)lk.onclick=async()=>{lk.disabled=true;lk.textContent="Loading…";const r=await stCall("lookups");if(!r.ok){C.toast(`ServiceTitan: ${r.error}`);lk.disabled=false;return;}STLOOK=r;C.render();};
+  const sv=document.getElementById("stSave");
+  if(sv)sv.onclick=async()=>{sv.disabled=true;
+    const rows=[...document.querySelectorAll("[data-stk]")].map(i=>({key:i.dataset.stk,value:i.value===""?null:Number(i.value)}));
+    const up=rows.filter(r=>r.value!=null&&isFinite(r.value)).map(r=>({key:r.key,value:r.value})),del=rows.filter(r=>r.value==null).map(r=>r.key);
+    if(up.length){const{error}=await C.sb.from("st_settings").upsert(up);if(error){sv.disabled=false;C.fail(error);return;}}
+    for(const k of del){await C.sb.from("st_settings").delete().eq("key",k);}
+    C.toast("Defaults saved");await stLoad();C.render();};
+  const mt=document.getElementById("stMatch");
+  if(mt)mt.onclick=async()=>{mt.disabled=true;const norm=x=>String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");let n=0;
+    for(const v of VENDORS.filter(v=>!v.st_vendor_id)){const names=[v.name,...(v.aliases||[])].map(norm);const hit=(STLOOK.vendors||[]).find(x=>names.includes(norm(x.name)));
+      if(hit){const{error}=await C.sb.from("vendors").update({st_vendor_id:hit.id}).eq("id",v.id);if(!error)n++;}}
+    C.toast(n?`Matched ${n} vendor${n===1?"":"s"}`:"No new matches. Set the rest under Vendors.");await load(C);C.render();};
+}
+
 /* ---------- entry ---------- */
 function render(route){
   const app=document.getElementById("app");app.classList.add("wide");
   const parts=String(route||"").split("/").map(decodeURIComponent).filter(Boolean);
   if(!parts.length){DRAFT=null;RCV=null;app.classList.remove("wide");app.innerHTML=renderList();bindList();return;}
   if(parts[0]==="requests"){DRAFT=null;app.classList.remove("wide");app.innerHTML=renderRequests();bindRequests();return;}
+  if(parts[0]==="servicetitan"){DRAFT=null;app.classList.remove("wide");if(!mgr()){location.hash="#po";return;}app.innerHTML=renderST();bindST();stLoad().then(()=>{if(location.hash==="#po/servicetitan"){app.innerHTML=renderST();bindST();}});return;}
   if(parts[0]==="vendors"){DRAFT=null;app.classList.remove("wide");app.innerHTML=renderVendors();bindVendors();return;}
   if(parts[0]==="new"){if(!DRAFT||DRAFT.id){startEdit(null);app.innerHTML='<p class="lead">Loading items…</p>';return;}app.innerHTML=renderEdit();bindEdit();return;}
   const p=POS.find(x=>x.id===parts[0]);
