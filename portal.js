@@ -78,6 +78,7 @@ function renderTab(t){
   return `<h1>${e(T.title)}</h1><p class="lead">${e(T.lead)}</p>
   <div class="sbar"><div class="q"><input id="tq" type="search" placeholder="Filter ${e(T.title)}" value="${e(TQ[t]||"")}" autocomplete="off" aria-label="Filter ${e(T.title)}"></div></div>
   ${TQ[t]?"":jumpChips(T.sections)}
+  ${t==="academy"&&!TQ[t]&&window.R3Courses?window.R3Courses.academyBlock():""}
   <div id="tsecs">${renderSections(T.sections,TQ[t],true)||`<div class="empty">${TQ[t]?`Nothing in ${e(T.title)} matches “${e(TQ[t])}”.`:`Nothing here yet.`}</div>`}</div>`;
 }
 function bindSections(){
@@ -281,6 +282,7 @@ function renderViewer(slug){
   const admin=C.isAdmin();
   return `<div class="vbar"><p class="crumb"><a href="#${tk}">${e(tk==="portal"?"Team Portal":PTABS[tk].title)}</a> › <a href="#${tk}" data-jump2="${e(p.section)}">${e(sec?sec.title:"")}</a></p>
     <div class="vtitle"><h1>${e(p.title)}</h1>${p.encrypted?`<span class="tag t-w">Enter the admin PIN on the page to open it</span>`:""}${admin?`<button class="btn ghost sm" id="pset" type="button" aria-expanded="${EDIT&&EDIT.kind==="page"?"true":"false"}">Page settings</button>`:""}</div>
+    ${window.R3Courses?window.R3Courses.viewerBar(slug):""}
     ${NOTICE?`<div class="banner">That link goes to a page that isn’t in 3R Tools yet. <a class="src" href="${e(NOTICE)}" target="_blank" rel="noopener">Open it on the Google Site</a> <button class="linkbtn" id="nclose" type="button">Dismiss</button></div>`:""}
     ${admin&&EDIT&&EDIT.kind==="page"?`<form class="panel maps" id="psForm">
       <label class="fl">Title<input id="psT" value="${e(p.title)}" required></label>
