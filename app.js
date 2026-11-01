@@ -122,10 +122,10 @@ async function setVendor(v,patch){
 
 /* ---------- routing ---------- */
 const PORTAL_TABS=["portal","tools","academy","process","portals","presentations"];
-const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["requests","Requests"],["courses","Courses"],["plan","Scorecard"],["oncall","On call"],["whotocall","Who to call"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
+const ALL_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["requests","Requests"],["courses","Courses"],["po","Purchasing"],["plan","Scorecard"],["oncall","On call"],["whotocall","Who to call"],["find","Find items"],["list","Return list"],["history","Closed returns"],["spend","Vendor spend"],["import","Add purchases",true],["people","People",true],["about","About the data"]];
 let TABS=ALL_TABS;
 /* The top bar. Warehouse holds Inventory and the Return Generator screens in a second row. */
-const WH_SUB=["find","list","history","spend","import","about"];
+const WH_SUB=["po","find","list","history","spend","import","about"];
 const TOP_TABS=[["portal","Team Portal"],["tools","Team Tools"],["academy","Academy"],["process","Process"],["portals","Portals"],["presentations","Presentations"],["warehouse","Warehouse"],["requests","Requests"],["people","People",true]];
 /* A route is a tab key, or a Team Portal route: "portal/contacts" or "p/<page>". */
 const tabOf=r=>r.startsWith("p/")?((window.R3Portal&&window.R3Portal.tabFor(r.slice(2)))||"portal"):r==="warehouse"?"find":r.split("/")[0];
@@ -639,17 +639,19 @@ function renderAbout(){
 /* ---------- render ---------- */
 function drawTabs(){
   const openN=RET.filter(x=>x.status!=="closed").length,waitN=window.R3Requests?window.R3Requests.waitingCount():0;
+  const poN=window.R3Purchasing?window.R3Purchasing.waitingCount():0;
   const inWH=WH_SUB.includes(tab),top=inWH?"warehouse":tab==="courses"?"academy":tab==="plan"?"presentations":tab==="oncall"||tab==="whotocall"?"tools":tab;
   const ct=k=>k==="warehouse"&&openN?`<span class="ct">${openN}</span>`:k==="requests"&&waitN?`<span class="ct hot">${waitN}</span>`:"";
   $("#tabs").innerHTML=TOP_TABS.filter(t=>!t[2]||isAdmin).map(([k,l])=>`<a href="#${k}" class="${k===top?"on":""}">${l}${ct(k)}</a>`).join("");
   const sub=$("#subtabs");sub.hidden=!inWH;
-  if(inWH)sub.innerHTML=`<a href="inventory/">Inventory</a>`+TABS.filter(([k])=>WH_SUB.includes(k)).map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}</a>`).join("");
+  if(inWH)sub.innerHTML=`<a href="inventory/">Inventory</a>`+TABS.filter(([k])=>WH_SUB.includes(k)).map(([k,l])=>`<a href="#${k}" class="${k===tab?"on":""}">${l}${k==="list"&&openN?`<span class="ct">${openN}</span>`:""}${k==="po"&&poN?`<span class="ct hot">${poN}</span>`:""}</a>`).join("");
 }
 function render(){
   if(route.startsWith("p/"))tab=tabOf(route);
   if(!TABS.some(t=>t[0]===tab)){tab="portal";route="portal";}
   drawTabs();
   if(tab==="requests"){window.R3Requests.render(route.split("/").slice(1).join("/"));return;}
+  if(tab==="po"){window.R3Purchasing.render(route.split("/").slice(1).join("/"));return;}
   if(tab==="plan"){window.R3Plan.render();return;}
   if(tab==="oncall"||tab==="whotocall"){window.R3OnCall.render(tab);return;}
   if(tab==="courses"){window.R3Courses.render(route.split("/").slice(1).join("/"));return;}
@@ -767,7 +769,7 @@ async function start(session){
   $("#who").textContent=p.name||p.email;
   TABS=ALL_TABS.filter(t=>!t[2]||isAdmin);
   const portalCtx={sb,esc,toast,fail,fmtDate,render:()=>render(),drawTabs:()=>drawTabs(),profile:()=>profile,isAdmin:()=>isAdmin};
-  try{await Promise.all([window.R3Portal.load(portalCtx),window.R3Requests.load(portalCtx),window.R3Courses.load(portalCtx),window.R3Plan.load(portalCtx),window.R3OnCall.load(portalCtx),loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
+  try{await Promise.all([window.R3Portal.load(portalCtx),window.R3Requests.load(portalCtx),window.R3Courses.load(portalCtx),window.R3Plan.load(portalCtx),window.R3Purchasing.load(portalCtx),window.R3OnCall.load(portalCtx),loadLists(),loadPurchases(),loadReturns(),loadImports(),isAdmin?loadPeople():null]);}
   catch(e){console.error(e);$("#app").innerHTML=`<div class="warnbox">3R Tools couldn’t load. Reload the page. If it keeps happening, sign out and back in.</div>`;return;}
   render();
   let t=null;const soon=()=>{clearTimeout(t);t=setTimeout(refreshReturns,300);};

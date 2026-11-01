@@ -192,3 +192,9 @@ nav.tabs a .ct.hot{background:var(--bad);color:#fff}
 .wrow{display:grid;grid-template-columns:72px 1fr;gap:8px;font-size:13.5px}.wrow span:first-child{color:var(--ink2);font-weight:700;font-size:12px;padding-top:1px}
 .wph{display:flex;flex-wrap:wrap;gap:5px}.wph a{text-decoration:none}.wcard .linkbtn{align-self:flex-start}
 .wform{grid-column:1/-1}
+/* purchasing */
+.potable td,.potable th{text-align:left;vertical-align:top}.potable tbody th b{display:block}.potable tbody th span{display:block;font-size:12px;color:var(--ink2);font-weight:400;white-space:normal;max-width:320px}
+.potable td.y{color:var(--good);font-weight:700}.potable td.m{color:var(--blue-d);font-weight:700}
+.poedit input{font-size:13px;padding:5px 6px;width:100%;min-width:70px}.poedit td:nth-child(2) input{min-width:200px}.poedit tfoot th{text-align:right}
+.rcvbar{margin:12px 0 4px}
+@media print{.tabs,header,.pacts,.chips,.sbar,.crumb,#toast{display:none!important}.cboardwrap{border:0}}
