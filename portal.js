@@ -272,7 +272,12 @@ addEventListener("message",ev=>{
   else if(ev.data.r3==="nav"){
     const path=String(ev.data.path||"").replace(/\/+$/,""),slug=path.split("/").pop();
     if(!slug||slug==="home"){location.hash="#portal";return;}
+    // Old Google Site addresses that are 3R Tools screens now.
+    const SITE_ROUTES={"contacts-and-support":"#portal/contacts","bonus-calc-and-submission":"#"+tabOfSection("bonus")};
+    if(SITE_ROUTES[slug]){location.hash=SITE_ROUTES[slug];return;}
     if(PBY[slug]&&PBY[slug].kind==="page"){location.hash="#p/"+slug;return;}
+    const own=PBY[slug]&&PBY[slug].kind==="link"&&String(PBY[slug].url||"").includes("/3r-tools/#");
+    if(own){location.hash=PBY[slug].url.slice(PBY[slug].url.indexOf("#"));return;}
     NOTICE=PBY[slug]&&PBY[slug].url?PBY[slug].url:"https://sites.google.com/3rplumbingandmechanical.com/3rteamportal/"+path;
     C.render();
   }
