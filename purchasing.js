@@ -10,6 +10,9 @@ const VIEWS=[["open","Open"],["Pending","Needs approval"],["Draft","Drafts"],["A
 const e=s=>C.esc(s);
 const mgr=()=>["manager","admin"].includes(C.profile().role);
 const admin=()=>C.profile().role==="admin";
+// Where links to the rest of 3R Tools and to Inventory point. The Inventory page sets these when it hosts Purchasing.
+const toolsUrl=()=>C.toolsUrl!=null?C.toolsUrl:"";
+const invUrl=()=>C.invUrl!=null?C.invUrl:"inventory/";
 const oldPortal=p=>String(p.source||"").startsWith("Old portal");
 const overLimit=p=>LIMIT!=null&&!admin()&&total(linesOf(p.id))>LIMIT;
 const me=()=>String(C.profile().email||"").toLowerCase();
@@ -64,7 +67,7 @@ function renderList(){
   const list=POS.filter(p=>inView(p)&&match(p));
   const n=k=>k==="all"?POS.length:k==="open"?POS.filter(p=>["Draft","Pending","Approved","Ordered","Rejected"].includes(p.status)).length:POS.filter(p=>p.status===k).length;
   return `${sections("po")}<h1>Purchasing</h1><p class="lead">Purchase orders for stock and jobs. Anyone can start one; managers approve and order it${LIMIT!=null?` (up to ${money(LIMIT)}; above that, leadership)`:""}; whoever unloads the truck receives it. Received stock goes straight into Inventory.</p>
-  <div class="btnrow pacts"><a class="btn" href="#po/new">New PO</a><a class="btn ghost" href="inventory/#reorder">Reorder from Inventory</a>${mgr()&&stOn()?`<button class="btn ghost" type="button" id="stPull">Refresh from ServiceTitan</button>`:""}${admin()?`<button class="btn ghost" type="button" id="poLimit">Approval limit${LIMIT!=null?": "+money(LIMIT):""}</button>`:""}</div>
+  <div class="btnrow pacts"><a class="btn" href="#po/new">New PO</a><a class="btn ghost" href="${invUrl()}#reorder">Reorder from Inventory</a>${mgr()&&stOn()?`<button class="btn ghost" type="button" id="stPull">Refresh from ServiceTitan</button>`:""}${admin()?`<button class="btn ghost" type="button" id="poLimit">Approval limit${LIMIT!=null?": "+money(LIMIT):""}</button>`:""}</div>
   <div class="chips">${VIEWS.map(([k,l])=>`<button class="chip${VIEW===k?" on":""}" type="button" data-view="${k}">${l}${n(k)?` <span class="ct${k==="Pending"&&mgr()?" hot":""}">${n(k)}</span>`:""}</button>`).join("")}</div>
   <div class="sbar"><div class="q"><input id="poq" type="search" placeholder="Search PO, vendor, job, item or part number" value="${e(Q)}" autocomplete="off" aria-label="Search purchase orders"></div></div>
   ${list.length?`<div class="rqlist">${list.map(p=>{const ls=linesOf(p.id);
@@ -120,7 +123,7 @@ function renderPO(p){
   <div class="btnrow pacts">${rc?"":acts.join("")}</div>
   ${rc?`<p class="hint">Enter what came in on each line, then press Save receipt. ${String(p.job).toLowerCase()==="stock"?"Stock lines go into the warehouse in Inventory.":"This PO is for a job, so nothing is added to warehouse stock."}</p>`:""}
   <div class="cboardwrap"><table class="cboard potable"><thead><tr><th>#</th><th>Item</th><th>Vendor part</th><th>Bin</th><th>Qty</th><th>Each</th><th>Total</th><th>Received</th>${rc?"<th>Came in now</th>":""}</tr></thead>
-  <tbody>${ls.map(l=>{const left=Math.max(0,+l.qty-(+l.received)-(+l.closed_short_qty||0));
+  <tbody>${ls.map(l=>{const left=Math.max(0,+l.qty-(+l.received||0)-(+l.closed_short_qty||0));
     return `<tr><td>${l.line_no}</td><th><b>${e(l.code)}</b><span>${e(l.description)}</span></th><td>${e(l.vendor_part)}</td><td>${e(l.bin)}</td><td>${num(l.qty)}</td><td>${money(l.unit_cost)}</td><td>${money(l.qty*l.unit_cost)}</td>
       <td class="${+l.received>=+l.qty?"y":+l.received>0?"m":""}">${num(l.received)}${+l.over_qty?` <span class="tag t-w">${num(l.over_qty)} extra</span>`:""}</td>
       ${rc?`<td><input class="pin" inputmode="decimal" data-rl="${l.id}" placeholder="${left?num(left):"0"}" aria-label="Received now, line ${l.line_no}"></td>`:""}</tr>`;}).join("")}</tbody></table></div>
@@ -159,7 +162,7 @@ function bindPO(p){
   const r=document.getElementById("poRcv");if(r)r.onclick=()=>{RCV={id:p.id};ERR="";C.render();};
   const rc=document.getElementById("rcvCancel");if(rc)rc.onclick=()=>{RCV=null;ERR="";C.render();};
   const ra=document.getElementById("rcvAll");
-  if(ra)ra.onclick=()=>document.querySelectorAll("[data-rl]").forEach(i=>{const l=LINES.find(x=>x.id===i.dataset.rl);i.value=num(Math.max(0,+l.qty-(+l.received)-(+l.closed_short_qty||0)));});
+  if(ra)ra.onclick=()=>document.querySelectorAll("[data-rl]").forEach(i=>{const l=LINES.find(x=>x.id===i.dataset.rl);i.value=num(Math.max(0,+l.qty-(+l.received||0)-(+l.closed_short_qty||0)));});
   const rs=document.getElementById("rcvSave");
   if(rs)rs.onclick=async()=>{ERR="";
     const lines=[...document.querySelectorAll("[data-rl]")].map(i=>({id:i.dataset.rl,qty:i.value.trim()===""?0:Number(i.value)})).filter(x=>x.qty);
@@ -261,7 +264,7 @@ function renderRequests(){
         :RQPICK===r.id?`<div class="rqpick"><select id="rqV" aria-label="Vendor"><option value="">Pick a vendor</option>${vs.map(v=>`<option value="${v.id}">${e(v.name)}</option>`).join("")}</select>
           <input id="rqC" class="pin" inputmode="decimal" placeholder="Cost each" aria-label="Cost each"><button class="btn sm" type="button" data-rqadd="${r.id}">Add</button><button class="btn ghost sm" type="button" data-rqcancel>Cancel</button></div>`
         :`<button class="btn sm" type="button" data-rqpick="${r.id}">Add to a PO</button>`}
-        <a class="linkbtn" href="#requests/${r.id}">Open request</a></div></div>`;};
+        <a class="linkbtn" href="${toolsUrl()}#requests/${r.id}">Open request</a></div></div>`;};
   return `${sections("requests")}<h1>Parts requests</h1>
   <p class="lead">Open “Tool or part” requests from the Requests tab. Add one to a PO and it goes on that vendor’s draft for the same job (or a new draft), linked back to the request.</p>
   ${PREQ.length?`<div class="rqlist">${PREQ.map(row).join("")}</div>`:`<div class="empty">No open parts requests.</div>`}`;
@@ -371,7 +374,11 @@ function render(route){
   if(parts[0]==="vendors"){DRAFT=null;app.classList.remove("wide");app.innerHTML=renderVendors();bindVendors();return;}
   if(parts[0]==="new"){if(!DRAFT||DRAFT.id){startEdit(null);app.innerHTML='<p class="lead">Loading items…</p>';return;}app.innerHTML=renderEdit();bindEdit();return;}
   const p=POS.find(x=>x.id===parts[0]);
-  if(!p){app.innerHTML=`<p class="crumb"><a href="#po">Purchasing</a></p><div class="empty">That PO isn’t here.</div>`;return;}
+  if(!p){
+    // A PO made a moment ago (say from Inventory's Reorder POs) may not be in the list yet: reload once.
+    if(render.missing!==parts[0]){render.missing=parts[0];app.innerHTML='<p class="lead">Loading…</p>';load(C).then(()=>C.render(),()=>C.render());return;}
+    app.innerHTML=`<p class="crumb"><a href="#po">Purchasing</a></p><div class="empty">That PO isn’t here.</div>`;return;}
+  render.missing=null;
   if(parts[1]==="edit"){if(!DRAFT||DRAFT.id!==p.id){startEdit(p);app.innerHTML='<p class="lead">Loading items…</p>';return;}app.innerHTML=renderEdit();bindEdit();return;}
   if(DRAFT)DRAFT=null;if(RCV&&RCV.id!==p.id)RCV=null;
   app.innerHTML=renderPO(p);bindPO(p);
