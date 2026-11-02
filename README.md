@@ -5,27 +5,21 @@ Internal tools for 3R Plumbing & Mechanical. One static page (`index.html`, `app
 ## What it does
 
 - **Team Portal**: the 3R Team Portal from Google Sites, behind sign-in. Home has the main line, quick links, announcements and every section; one search covers page titles, contacts and the text inside every page. Pages open in a sealed frame (`portal.js`) that can't see the sign-in; links between pages stay inside 3R Tools, and a page's saved settings are kept in the browser. Contacts is a searchable directory with tap-to-call. Leadership edits announcements, contacts and each page's section, audience and visibility.
-- **Find items**: search every supply-house purchase line ("3/4 press ell", ".75 cxc 90", a part number) and see how many can still go back, against which invoice. Same search and rules as the 3R Return Generator artifact.
-- **Return list / Closed returns**: one shared list per vendor, with RA number, status, slip check, CSV and print. Changes show up for everyone within a second.
-- **Vendor spend**: net spend by category, vendor and month, filtered by search, category, vendor, dates and document type. Tap a bar to drill in. CSV download. Admins can fix a line's category here.
-- **Add purchases** (admin): upload a CSV or Excel export from any supply house. Columns are matched automatically and can be changed. Categories come from the part number when 3R has bought it before, otherwise from the description. Documents already on file are skipped. Credit memo lines are matched to the most recent earlier purchase of the same part, so returns count by quantity. Any upload can be undone.
-- **Inventory** (`inventory/index.html`): the 3R Inventory page built in claude.ai on this database (`inv_*`, `po_*`, `st_queue`). It's published as handed off, with two changes: its embedded starting data (items with vendor costs) is emptied, because the data is already in Supabase and this repository is public, and the Zapier ping after a ServiceTitan push is removed. It shares the 3R Tools sign-in on this site.
-- **New invoices by themselves** (admin, on Add purchases): Zapier reads each vendor invoice or credit memo PDF and posts its lines to `public.purchase_intake` with an intake key an admin makes there. Setup: `docs/zapier-invoice-intake.md`.
 - **AR Cleanup Board** (`ar/`, managers and leadership): the claude.ai AR board, unchanged (`ar/board.js`), with `ar/shim.js` standing in for the artifact platform: shared records in `ar_docs`, the ServiceTitan snapshot in `ar_seed` (loaded after sign-in, never in this repository), live updates and who's-on-the-board over Supabase Realtime. Uses the 3R Tools sign-in.
 - **Requests** (`requests.js`): tool or part, time off, weekly vehicle check, bonus submission and training sign-up. Forms come from `request_types.fields`; each type routes to one person (Leadership changes who on the Requests tab). A request is seen by the sender, the person it's routed to, and Leadership. Status changes and comments go through `public.request_act`, which logs each one in `request_events`.
-- **Warehouse** tab: Inventory and the Return Generator screens (Find items, Return list, Closed returns, Vendor spend, Add purchases, About the data) share one tab with a second row of links.
 - **People** (admin): who can sign in, and whether they're Team, Manager or Leadership.
+
+The warehouse (Inventory, Purchasing and Returns) is a separate site and repository on the same Supabase project. Its tables (`inv_*`, `po_*`, `st_*`, `vendors`, `categories`, `imports`, `purchase_*`, `return_lines`) and their migrations stay in this project.
 
 ## Access
 
 - Sign-in is Supabase Auth, email and password. Only emails on `app_users` (People tab) can read or write anything; everyone else sees nothing.
 - To add someone: add them on the People tab, then in Supabase go to Authentication → Users → Add user with the same email and a password you give them.
 - Invite and password-reset emails open the page with a Set your password screen. They only work when Supabase → Authentication → URL Configuration has Site URL `https://ross680.github.io/3r-tools/` (and the same address under Redirect URLs). The sign-in page has a Forgot password button that sends that email.
+- Admins manage People and portal content.
 - Roles: **Team** (`staff`), **Manager** (`manager`) and **Leadership** (`admin`). Portal pages and announcements have an audience (everyone, managers and leadership, or leadership only) that the database enforces (`private.can_see`).
 - Portal page HTML is stored in Supabase (`portal_page_html`), never in this repository, because the repository is public. The 41 pages that were encrypted on Google Sites are still encrypted and ask for the admin PIN.
-- Admins import purchases, fix categories and manage People. Staff search, build return lists and see vendor spend.
 - The publishable key in `config.js` is meant to be public. Anonymous requests are refused on every table.
-- A return can't exceed what was bought minus what's already credited or on a list. The database enforces it (`private.guard_return_qty`).
 
 ## Database
 
