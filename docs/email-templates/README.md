@@ -19,7 +19,7 @@ Keep the `{{ .ConfirmationURL }}`, `{{ .Email }}` and `{{ .NewEmail }}` parts ex
 ## Before they work well
 
 1. **Site URL.** Authentication → URL Configuration → Site URL must be `https://ross680.github.io/3r-tools/`. Otherwise the button opens `localhost:3000`.
-2. **Redirect URLs.** Add `https://ross680.github.io/3r-tools/` and `https://ross680.github.io/3r-tools/inventory/`.
+2. **Redirect URLs.** Add `https://ross680.github.io/3r-tools/`.
 3. **Sender.** To send from a 3R address instead of Supabase's, set up custom SMTP (Brevo works) under Authentication → Emails → SMTP Settings. Supabase's own sender is also limited to a few emails an hour.
 
 ## Test
